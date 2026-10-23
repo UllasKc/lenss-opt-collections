@@ -373,8 +373,13 @@
       cells.forEach(c => { if (!seen.has(c[key])) seen.set(c[key], num(c[ordKey])); });
       return [...seen.entries()].sort((a, b) => (a[1] ?? 0) - (b[1] ?? 0) || String(a[0]).localeCompare(String(b[0]))).map(([k]) => k);
     };
-    const R = axis('r', 'r_ord'), C = axis('c', 'c_ord');
     const at = new Map(cells.map(c => [`${c.r}|${c.c}`, c]));
+    // A row or column with no value for this measure (e.g. "Current" for promises: no promise is
+    // made on an account that isn't overdue) is left out rather than shown as a line of dashes.
+    const has = (c) => c && num(c[heat.measure]) !== null;
+    const C0 = axis('c', 'c_ord'), R0 = axis('r', 'r_ord');
+    const R = R0.filter(rk => C0.some(ck => has(at.get(`${rk}|${ck}`))));
+    const C = C0.filter(ck => R.some(rk => has(at.get(`${rk}|${ck}`))));
     const label = (dim, k) => (dim === 'bucket' && k !== 'Current' ? `${k} days` : k);
     const maxAmt = Math.max(...cells.map(c => num(c.overdue_balance) || 0), 1);
     const tone = (v) => {
