@@ -271,7 +271,7 @@ function renderDrivers(s, o) {
     return `<div class="card panel driver-card"><div class="panel-head"><div><h3>${hEsc(f.factor)}</h3>
         <div class="panel-sub"><span class="strength clear">Clear difference: ${brokenRange(f)}</span> ${pct(f.hi.Broken_Rate)} for <b>${hEsc(f.hi.Segment)}</b>, ${pct(f.lo.Broken_Rate)} for <b>${hEsc(f.lo.Segment)}</b></div></div>
         ${askBtn(`Why do promises to pay break more often for some ${f.factor.toLowerCase()} segments, and what should we do about it?`, 'agent')}</div>
-      <div class="panel-body">${body}<div class="panel-note">The line marks the overall broken rate (${pct(overall)}), 12 months of promises.</div></div></div>`;
+      <div class="panel-body">${body}<div class="panel-note">Each bar: the share of that segment's promises that broke, 12 months. The line marks the overall rate (${pct(overall)}). Red: more than 3 percentage points above it; green: more than 3 below; faded: fewer than ${count(minP)} promises, not ranked.</div></div></div>`;
   }).join('');
   panel('pnlFlat', 'Factors that make little difference', `Their segments' broken rates differ by less than ${Math.round(ruleVal(s, 'driver_spread_pts', 0.10) * 100)} percentage points: knowing them doesn't tell you which promises will break.`,
     { q: 'Do product, state, porting status, contract renewal or new product interest affect whether promises to pay are broken?', mode: 'chat' },
@@ -298,7 +298,7 @@ function renderContact(s, o) {
       viewBtn('unresolved', 'View unresolved', '', `Contacted but not resolved first time, ${month}`, true)),
     card('transfer', 'Transferred', pct(s.Transfer_Rate), `last month ${pct(s.Prior_Transfer_Rate)} · 12 months ${pct(s.Transfer_Rate_12M)}`, 'Contacted customers whose call was transferred', 'warn',
       viewBtn('transferred', 'View accounts', '', `Transferred calls, ${month}`, true)),
-    card('repeat', 'Called again (repeat)', pct(s.Repeat_Rate), `last month ${pct(s.Prior_Repeat_Rate)} · 12 months ${pct(s.Repeat_Rate_12M)}`, 'Called again within about 7 to 14 days', 'warn',
+    card('repeat', 'Called again (repeat)', pct(s.Repeat_Rate), `last month ${pct(s.Prior_Repeat_Rate)} · 12 months ${pct(s.Repeat_Rate_12M)}`, 'Contacted customers who called again within about 7 to 14 days', 'warn',
       viewBtn('repeat', 'View accounts', '', `Called again, ${month}`, true)),
     card('clock', 'Average handle time', secs(s.Avg_Handle_Seconds), `last month ${secs(s.Prior_Avg_Handle_Seconds)} · 12 months ${secs(s.Avg_Handle_Seconds_12M)}`, 'Average handle time of contacted customers, in seconds', null,
       viewBtn('contacted', 'View accounts', '', `Contacted customers, ${month}`, true)),
@@ -312,10 +312,10 @@ function renderContact(s, o) {
     { q: 'Compare promise-kept rates between calls resolved first time and transferred calls, and what that means for the contact centre.', mode: 'agent' },
     outcomes.map(r => bar(hEsc(r.Call_Outcome), num(r.Broken_Rate), maxB, pct(r.Broken_Rate),
       r.Call_Outcome === 'Resolved first time' ? 'good' : r.Call_Outcome === 'No contact' ? 'brand' : 'bad',
-      `${count(r.Promises)} promises · promised in ${pct(r.Promise_Rate, 0)} of these months ` +
+      `${count(r.Promises)} promises, made in ${pct(r.Promise_Rate, 0)} of ${count(r.Account_Months)} account-months with this outcome ` +
       viewBtn('segment_broken', 'View broken', `Call outcome|${r.Call_Outcome}`, `Broken promises after: ${r.Call_Outcome.toLowerCase()}, 12 months`, true),
       overall, `Overall ${pct(overall)}`)).join('') +
-    `<div class="panel-note">"No contact" means no contact-centre contact was recorded that month; these promises were made another way (app, SMS, IVR, online, store), and the data doesn't say which. Observed, not a controlled experiment.</div>`);
+    `<div class="panel-note">Each bar: the share of promises that broke, by how that month's call went; the line is the overall rate. "No contact" means no contact-centre contact was recorded that month; these promises were made another way (app, SMS, IVR, online, store), and the data doesn't say which. Observed, not a controlled experiment.</div>`);
 
   // Scenario 5: transfers and handle time.
   const nonXfer = outcomes.filter(r => r.Call_Outcome === 'Resolved first time' || r.Call_Outcome === 'Not resolved, not transferred');
@@ -331,7 +331,7 @@ function renderContact(s, o) {
     states.map(r => bar(hEsc(r.State), num(r.Transfer_Rate), maxT, pct(r.Transfer_Rate), 'warn',
       `${count(r.Transfers)} of ${count(r.Contacts)} calls · ${count(r.Transferred_Handle_Hours)} hours ` +
       viewBtn('transferred_state', 'View', r.State, `Transferred calls in ${r.State}, 12 months`, true))).join('') +
-    `<div class="panel-note">${hasCost ? 'Cost uses the handle_cost_per_minute business rule.' : 'Shown in hours: no cost per minute of handle time has been supplied, so no dollar cost is shown.'} Transfer rates differ little by state.</div>`);
+    `<div class="panel-note">Each bar: transferred calls ÷ contacted customers in that state, 12 months (one contact per account per month); the hours are the handle time of the transferred calls. ${hasCost ? 'Cost uses the handle_cost_per_minute business rule.' : 'Shown in hours: no cost per minute of handle time has been supplied, so no dollar cost is shown.'} Transfer rates differ little by state.</div>`);
 
   // Scenario 6: repeat calls by last month's outcome.
   const rep = o.repeat || [];
@@ -340,12 +340,20 @@ function renderContact(s, o) {
   const good = rep.find(r => r.Prior_Month_Outcome === 'Resolved first time last month') || {};
   panel('pnlRepeat', 'Scenario 6 · Unresolved calls come back', `Customers whose call last month was not resolved called again <b>${pct(bad.Repeat_Rate)}</b> of the time, against ${pct(good.Repeat_Rate)} after a first-time resolution.`,
     { q: 'Which customers called again after an unresolved call this month, and what do they have in common?', mode: 'agent' },
-    rep.map(r => bar(hEsc(r.Prior_Month_Outcome), num(r.Repeat_Rate), maxR, pct(r.Repeat_Rate),
+    rep.map(r => bar(hEsc(REPEAT_GROUP[r.Prior_Month_Outcome] || r.Prior_Month_Outcome), num(r.Repeat_Rate), maxR, pct(r.Repeat_Rate),
       r.Prior_Month_Outcome === 'Not resolved last month' ? 'bad' : r.Prior_Month_Outcome === 'Resolved first time last month' ? 'good' : 'brand',
-      `${count(r.Repeat_Calls)} repeat calls of ${count(r.Contacts)} contacts` +
+      `${count(r.Repeat_Calls)} called again, of ${count(r.Contacts)} contacted` +
       (r.Prior_Month_Outcome === 'Not resolved last month' ? ' ' + viewBtn('repeat_unresolved_12m', 'View', '', 'Called again after an unresolved call, 12 months', true) : ''))).join('') +
-    `<div class="panel-note">Contacted customers over 12 months, by how their call went the month before.</div>`);
+    `<div class="panel-note">Each bar: the share of customers contacted this month who called again within about 7 to 14 days, grouped by how their call went the month before (12 months). "Not resolved" includes transferred calls. November 2025 is the first month in the data, so it has no month before.</div>`);
 }
+
+/** Scenario 6's groups in words: "not resolved" covers transferred calls too. */
+const REPEAT_GROUP = {
+  'Resolved first time last month': 'Resolved first time last month',
+  'Not resolved last month': 'Not resolved last month (incl. transferred)',
+  'No contact last month': 'No contact last month',
+  'First month (no history)': 'November 2025 (no month before)',
+};
 
 /** 4. Where is the money? Overdue balance by days past due, and the 12-month trend. */
 function renderMoney(s, o) {
@@ -359,12 +367,13 @@ function renderMoney(s, o) {
     (late.length ? `<b>${pct(lateShare, 0)}</b> of the overdue balance is more than ${count(ruleVal(s, 'dpd_bucket_2_max', 60))} days past due.` : ''));
   const colors = ['#0E8F80', '#0B6E99', '#D97706', '#DC2626'];
   const stack = `<div class="stack">${rows.map((r, i) => `<span style="width:${(100 * num(r.Balance_Share)).toFixed(2)}%;background:${colors[i % colors.length]}" title="${hEsc(r.DPD_Bucket)} days: ${money(r.Overdue_Balance)} (${pct(r.Balance_Share)})">${num(r.Balance_Share) > 0.08 ? pct(r.Balance_Share, 0) : ''}</span>`).join('')}</div>`;
-  const table = `<table class="mini risk-table"><thead><tr><th>Days past due</th><th>Accounts</th><th>Overdue</th><th>Share</th><th>Promises</th><th>Broken</th><th></th></tr></thead><tbody>
+  const table = `<table class="mini risk-table"><thead><tr><th>Days past due</th><th>Accounts</th><th>Overdue</th><th>Share</th><th>Promises</th><th>Broken rate</th><th></th></tr></thead><tbody>
     ${rows.map((r, i) => `<tr><td><span class="dot" style="background:${colors[i % colors.length]}"></span>${hEsc(r.DPD_Bucket)} days</td><td>${count(r.Accounts)}</td><td>${money(r.Overdue_Balance)}</td><td>${pct(r.Balance_Share)}</td><td>${count(r.Promises)}</td><td>${pct(r.Broken_Rate, 0)}</td><td>${viewBtn('bucket', 'View', r.DPD_Bucket, `${r.DPD_Bucket} days past due, ${month}`, true)}</td></tr>`).join('')}
     <tr class="tot"><td>Total</td><td>${count(rows.reduce((a, r) => a + num(r.Accounts), 0))}</td><td>${money(rows.reduce((a, r) => a + num(r.Overdue_Balance), 0))}</td><td>100%</td><td>${count(rows.reduce((a, r) => a + num(r.Promises), 0))}</td><td></td><td></td></tr></tbody></table>`;
   panel('pnlExposure', 'Overdue balance by days past due', `${hEsc(month)}, overdue accounts`,
     { q: 'How is the overdue balance spread across days-past-due buckets, and where are promises breaking most?', mode: 'chat' },
-    stack + `<div class="table-scroll flat">${table}</div>`);
+    stack + `<div class="table-scroll flat">${table}</div>` +
+    `<div class="panel-note">The bar splits the overdue balance by days past due. Promises and broken rate: promises made this month by the accounts in each bucket.</div>`);
   renderTrend(o, 'Overdue_Balance');
 }
 
@@ -384,7 +393,8 @@ function renderTrend(o, key) {
   panel('pnlTrend', '12-month trend', first && last ? `${hEsc(t.label)}: ${t.fmt(first[key])} in ${hEsc(first.Snapshot_Month)}, ${t.fmt(last[key])} in ${hEsc(last.Snapshot_Month)}` : '',
     { q: `How has the ${t.label.toLowerCase()} changed month by month over the last 12 months?`, mode: 'chat' },
     `<div class="trend-ctl">${Object.entries(TREND).map(([k, v]) => `<button class="chip-btn${k === key ? ' on' : ''}" data-trend="${k}">${hEsc(v.label)}</button>`).join('')}</div>
-     <div class="trend-cv"><canvas id="ccTrendChart" aria-label="${hEsc(t.label)} by month" role="img"></canvas></div>`);
+     <div class="trend-cv"><canvas id="ccTrendChart" aria-label="${hEsc(t.label)} by month" role="img"></canvas></div>
+     <div class="panel-note">One point per monthly snapshot; the axis starts at zero.${key === 'Overdue_Balance' ? ' Overdue balance: accounts more than 0 days past due on the 1st of the month.' : key === 'Broken_Rate' || key === 'Promised_Amount' ? ' Promises made in that month.' : ' Shares of the customers contacted that month.'}</div>`);
   document.querySelectorAll('#pnlTrend [data-trend]').forEach(b => b.addEventListener('click', () => renderTrend(o, b.dataset.trend)));
   if (!window.Chart || !rows.length) return;
   if (trendChart) trendChart.destroy();
@@ -392,7 +402,7 @@ function renderTrend(o, key) {
     type: 'line',
     data: { labels: rows.map(r => r.Snapshot_Month), datasets: [{ label: t.label, data: rows.map(r => num(r[key])), borderColor: '#0B6E99', backgroundColor: 'rgba(11,110,153,.12)', fill: true, tension: .3, pointRadius: 3 }] },
     options: { maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => `${t.label}: ${t.fmt(c.parsed.y)}` } } },
-      scales: { y: { ticks: { callback: v => t.axis(v) } } } },
+      scales: { y: { beginAtZero: true, ticks: { callback: v => t.axis(v) } } } },
   });
 }
 

@@ -228,7 +228,7 @@
         ${askBtn(scoped(`Compare ${m.label.toLowerCase()} by ${DIM_LABEL[state.dim].toLowerCase()} and explain what drives the differences`), 'agent')}
       </div></div>
       <div class="panel-body">${rows.length ? (state.view === 'table' ? table : `<div class="xs-list">${bars}</div>`) : '<div class="empty-note">No accounts match these filters.</div>'}
-      ${drillable && rows.length > 1 && state.view === 'bars' ? '<div class="panel-note">Click a bar to filter everything on this page to it.</div>' : ''}</div>`;
+      ${rows.length && state.view === 'bars' ? `<div class="panel-note">${m.rate && m.good !== undefined ? 'Green: more than 5% better than this view (the marker); red: more than 5% worse. ' : ''}${!m.rate && num((d.totals || {}).months) > 1 && /overdue|accounts/.test(state.measure) ? 'Over several months, balances and accounts are the monthly average. ' : ''}${drillable && rows.length > 1 ? 'Click a bar to filter everything on this page to it.' : ''}</div>` : ''}</div>`;
     el.querySelector('#xsDim').addEventListener('change', e => { state.dim = e.target.value; remember(); renderSlicer(state.data); renderMoney(state.data); renderMix(state.data); });
     el.querySelector('#xsMeasure').addEventListener('change', e => { state.measure = e.target.value; remember(); renderSlicer(state.data); });
     el.querySelectorAll('.xs-view button').forEach(b => b.addEventListener('click', () => { state.view = b.dataset.v; renderSlicer(state.data); }));
@@ -245,7 +245,7 @@
       rows.map(r => bar(hEsc(r.k), num(r.broken_rate), max, pct(r.broken_rate),
         r.k === 'Resolved first time' ? 'good' : r.k === 'No contact' ? 'brand' : 'bad',
         `${count(r.promises)} promises · ${money(r.broken_amount)} broken ${xpView({ outcome: r.k, stage: 'broken' }, `Broken promises: ${r.k}`)}`,
-        overall, `This view ${pct(overall)}`)).join('') || '<div class="empty-note">No promises in this view.</div>');
+        overall, `This view ${pct(overall)}`)).join('') + (rows.length ? '<div class="panel-note">Each bar: the share of promises that broke; the line is this view\'s overall rate. "No contact" means no contact-centre contact was recorded that month; those promises were made another way (app, SMS, IVR, online, store).</div>' : '') || '<div class="empty-note">No promises in this view.</div>');
   }
 
   // ---- the 12-month trend of this view (every filter but the month)
@@ -295,7 +295,7 @@
     panel('xpMoney', `Promised money: kept and broken, by ${DIM_LABEL[state.dim].toLowerCase()}`,
       `${hEsc(periodText())}: ${money(t.promised_amount)} promised, ${money(t.broken_amount)} of it broken (${pct(num(t.broken_amount) / num(t.promised_amount))})`,
       ask(`Where is the most promised money broken, by ${DIM_LABEL[state.dim].toLowerCase()}`, 'chat'),
-      rows.length ? '<div class="xp-chart"><canvas id="xpMoneyChart" role="img" aria-label="Promised amount kept and broken"></canvas></div>' : '<div class="empty-note">No promises in this view.</div>');
+      rows.length ? '<div class="xp-chart"><canvas id="xpMoneyChart" role="img" aria-label="Promised amount kept and broken"></canvas></div><div class="panel-note">Each bar is the amount promised; kept is the amount promised less the amount of the broken promises.</div>' : '<div class="empty-note">No promises in this view.</div>');
     chartIn('xpMoneyChart', {
       type: 'bar',
       data: { labels: rows.map(r => dimLabel(r.k)), datasets: [
@@ -306,35 +306,37 @@
     });
   }
 
-  // ---- how the month's contact went, by the slicer's dimension (shares of account-months, adding up to 100%)
+  // ---- how the call went, by the slicer's dimension: shares of contacted customers (the base of the
+  // FCR rate), so resolved first time + transferred + left unresolved = 100% and match the FCR tile.
+  // Most account-months have no contact at all; that share is in each label instead of the bar.
   function renderMix(d) {
-    const rows = dimRows(d);
-    const part = (r) => {
-      const n = num(r.account_months) || 0, c = num(r.contacts) || 0;
-      const res = c * (num(r.fcr_rate) || 0), xf = c * (num(r.transfer_rate) || 0);
-      return n ? [res / n, xf / n, Math.max(0, c - res - xf) / n, Math.max(0, n - c) / n] : [0, 0, 0, 0];
-    };
-    const parts = rows.map(part);
-    const names = [['Resolved first time', '#0E8F80'], ['Transferred', '#D97706'], ['Left unresolved', '#DC2626'], ['No contact', '#CBD5E1']];
+    const rows = dimRows(d).filter(r => num(r.contacts) > 0);
+    const parts = rows.map(r => {
+      const f = num(r.fcr_rate) || 0, x = num(r.transfer_rate) || 0;
+      return [f, x, Math.max(0, 1 - f - x)];
+    });
+    const t = d.totals || {};
+    const names = [['Resolved first time', '#0E8F80'], ['Transferred', '#D97706'], ['Left unresolved', '#DC2626']];
     panel('xpMix', `Call outcomes by ${DIM_LABEL[state.dim].toLowerCase()}`,
-      `${hEsc(periodText())}: share of account-months by how that month's contact went (the four add up to 100%)`,
+      `${hEsc(periodText())}: how the call went for the ${count(t.contacts)} contacted customers (${pct(t.contact_rate, 0)} of account-months); ` +
+      `the three add up to 100%. Overall ${pct(t.fcr_rate)} resolved first time.`,
       ask(`Compare first contact resolution and transfers by ${DIM_LABEL[state.dim].toLowerCase()}`, 'chat'),
-      rows.length ? '<div class="xp-chart"><canvas id="xpMixChart" role="img" aria-label="Call outcome mix"></canvas></div>' : '<div class="empty-note">No accounts in this view.</div>');
+      rows.length ? '<div class="xp-chart"><canvas id="xpMixChart" role="img" aria-label="Call outcomes of contacted customers"></canvas></div>' : '<div class="empty-note">No contacted customers in this view.</div>');
     chartIn('xpMixChart', {
       type: 'bar',
-      data: { labels: rows.map(r => dimLabel(r.k)), datasets: names.map(([l, c], i) => ({ label: l, data: parts.map(p => p[i]), backgroundColor: c })) },
+      data: { labels: rows.map(r => `${dimLabel(r.k)} (${pct(r.contact_rate, 0)} contacted)`), datasets: names.map(([l, c], i) => ({ label: l, data: parts.map(p => p[i]), backgroundColor: c })) },
       options: stacked(v => pct(v, 0), 1),
     });
   }
 
   // ---- two dimensions at once: product by arrears stage (or any pair), coloured against this view
   const HEAT_MEASURES = {
-    broken_rate: { label: 'Broken-promise rate', good: false, base: 'promises', unit: 'promises' },
-    kept_rate: { label: 'Kept-promise rate', good: true, base: 'promises', unit: 'promises' },
-    promise_rate: { label: 'Promise rate (promises ÷ account-months)', good: true, base: 'account_months', unit: 'account-months' },
-    fcr_rate: { label: 'Resolved first time (FCR)', good: true, base: 'contacts', unit: 'contacts' },
-    transfer_rate: { label: 'Transferred', good: false, base: 'contacts', unit: 'contacts' },
-    repeat_rate: { label: 'Called again (repeat)', good: false, base: 'contacts', unit: 'contacts' },
+    broken_rate: { label: 'Broken-promise rate', good: false, base: 'promises', unit: 'promises', band: 0.05 },
+    kept_rate: { label: 'Kept-promise rate', good: true, base: 'promises', unit: 'promises', band: 0.05 },
+    promise_rate: { label: 'Promise rate (promises ÷ account-months)', good: true, base: 'account_months', unit: 'account-months', band: 0.02 },
+    fcr_rate: { label: 'Resolved first time (FCR)', good: true, base: 'contacts', unit: 'contacts', band: 0.05 },
+    transfer_rate: { label: 'Transferred', good: false, base: 'contacts', unit: 'contacts', band: 0.03 },
+    repeat_rate: { label: 'Called again (repeat)', good: false, base: 'contacts', unit: 'contacts', band: 0.03 },
     overdue_balance: { label: 'Overdue balance', amount: true },
   };
   const HEAT_DIMS = [...SLICE_DIMS, 'month'];
@@ -385,7 +387,7 @@
     const tone = (v) => {
       if (m.amount || overall === null) return 'brand';
       const diff = v - overall;
-      if (Math.abs(diff) < 0.05) return 'brand';
+      if (Math.abs(diff) < m.band) return 'brand';
       return (m.good ? diff > 0 : diff < 0) ? 'good' : 'bad';
     };
     const stage = m.amount ? 'overdue' : m.base === 'promises' ? (heat.measure === 'kept_rate' ? 'kept' : 'broken') : m.base === 'contacts' ? 'contacted' : 'promised';
@@ -403,8 +405,9 @@
         title="${hEsc(`${where}: ${m.label.toLowerCase()} ${shown}, ${sub}${few ? ` (fewer than ${minP} promises: read with care)` : ''}. Click to see the accounts.`)}">${shown}<small>${sub}</small></button>`;
     };
     const opts = (cur, other) => HEAT_DIMS.filter(k => k !== other).map(k => `<option value="${k}"${k === cur ? ' selected' : ''}>${hEsc(DIM_LABEL[k])}</option>`).join('');
-    const legend = m.amount ? '<span class="t-brand">Darker is more overdue</span>'
-      : `<span class="t-bad">Worse than this view by 5+ percentage points</span><span class="t-brand">Within 5 points of this view (${pct(overall)})</span><span class="t-good">Better by 5+ points</span>`;
+    const several = num((state.data?.totals || {}).months) > 1;
+    const legend = m.amount ? `<span class="t-brand">Darker is more overdue${several ? ' (monthly average over the months in view)' : ''}</span>`
+      : `<span class="t-bad">Worse than this view by ${Math.round(m.band * 100)}+ percentage points</span><span class="t-brand">Within ${Math.round(m.band * 100)} points of this view (${pct(overall)})</span><span class="t-good">Better by ${Math.round(m.band * 100)}+ points</span>`;
     const body = R.length && C.length
       ? `<div class="table-scroll flat"><div class="heat xp-heat" style="--cols:${C.length};min-width:${130 + C.length * 72}px">
           <div></div>${C.map(ck => `<div class="heat-h">${hEsc(label(heat.cols, ck))}</div>`).join('')}
