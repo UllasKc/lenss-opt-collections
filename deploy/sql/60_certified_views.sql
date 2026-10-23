@@ -1,4 +1,4 @@
--- Certified views over the Optus collections data, answering the client's Scenario_Guide and
+-- Certified views over the Optus collections data, answering the client's Scenario Guide and
 -- Sample_BI_Questions. Thresholds and bands are read live from gold.qry_rules (CROSS JOIN, or
 -- {{live:<name>}} expanded by the deploy), so every value comes from gold.business_rules_config.
 -- Each view carries a description (COMMENT ON TABLE / COLUMN) saying the business question it
@@ -86,7 +86,7 @@ SELECT
   CASE WHEN g.Porting_Status = 'Outbound' AND g.Credit_Score < rl.s2_credit_below THEN 1 ELSE 0 END AS Scenario_2_Flag,
   CASE WHEN g.Missed_Payments_L12M >= rl.s3_min_missed_payments AND g.Contract_Renewal_Window_Flag = 1 THEN 1 ELSE 0 END AS Scenario_3_Flag
 FROM g CROSS JOIN rl;
-COMMENT ON TABLE {{catalog}}.{{prefix}}_gold.qry_account_month IS 'The governed detail view: one row per account per monthly snapshot (15,000 accounts x 12 months, Nov 2025 to Oct 2026), amounts in AUD. Adds the bands (credit, days past due, missed payments, promise lead time), the call outcome, last month''s call outcome, repeat-call streaks and the Scenario_Guide flags, all from business_rules_config. Use for account lists and any question the summary views don''t cover. Filter Is_Latest_Snapshot = 1 for "this month" / "latest month". Broken_PTP_Flag is NULL when no promise was made; FCR, transfer and repeat flags are NULL when there was no contact.';
+COMMENT ON TABLE {{catalog}}.{{prefix}}_gold.qry_account_month IS 'The governed detail view: one row per account per monthly snapshot (15,000 accounts x 12 months, Nov 2025 to Oct 2026), amounts in AUD. Adds the bands (credit, days past due, missed payments, promise lead time), the call outcome, last month''s call outcome, repeat-call streaks and the Scenario Guide flags, all from business_rules_config. Use for account lists and any question the summary views don''t cover. Filter Is_Latest_Snapshot = 1 for "this month" / "latest month". Broken_PTP_Flag is NULL when no promise was made; FCR, transfer and repeat flags are NULL when there was no contact.';
 COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_account_month.Is_Latest_Snapshot IS '1 on the latest snapshot (1 October 2026)';
 COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_account_month.Overdue_Balance IS 'Outstanding_Balance when the account is overdue (Days_Past_Due > 0), else 0 (AUD)';
 COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_account_month.DPD_Bucket IS 'Current, 1-30, 31-60, 61-90 or 91+ days past due (dpd_bucket_* rules); sort by DPD_Bucket_Order';
@@ -96,7 +96,7 @@ COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_account_month.Broken_PTP_Flag 
 COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_account_month.Due_After_Latest_Snapshot_Flag IS '1 when the promise falls due after the latest snapshot (every promise of 1 October 2026). Its outcome is still the recorded Broken_PTP_Flag';
 COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_account_month.Call_Outcome IS 'Resolved first time (FCR), Transferred (never FCR), Not resolved, not transferred, or No contact this month';
 COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_account_month.Prior_Month_Outcome IS 'Last month''s call outcome for this account: Resolved first time last month, Not resolved last month, No contact last month, or First month (no history)';
-COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_account_month.Repeat_After_Unresolved_Flag IS '1 = called again this month (Repeat_Call_Flag) after a call last month that was not resolved first time: the Scenario_Guide''s "Repeat Caller Frustration"';
+COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_account_month.Repeat_After_Unresolved_Flag IS '1 = called again this month (Repeat_Call_Flag) after a call last month that was not resolved first time: the Scenario Guide''s "Repeat Caller Frustration"';
 COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_account_month.Repeat_Run_Months IS 'Consecutive months up to this one with a repeat call';
 COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_account_month.Repeat_Streak_Flag IS '1 = repeat calls in at least repeat_streak_months (2) consecutive months up to this one';
 COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_account_month.Scenario_1_Flag IS 'Scenario 1, Upgrade-but-Overdue: interested in a new product and more than s1_min_dpd (30) days past due';
@@ -217,7 +217,7 @@ SELECT Call_Outcome, MIN(Call_Outcome_Order) AS Call_Outcome_Order,
   SUM(Handle_Time_Seconds)/3600.0                             AS Handle_Hours
 FROM {{catalog}}.{{prefix}}_gold.qry_account_month
 GROUP BY Call_Outcome;
-COMMENT ON TABLE {{catalog}}.{{prefix}}_gold.qry_fcr_vs_promises IS 'Answers the Scenario_Guide''s "Contact Center Efficiency vs Collections" ("Compare FCR rates against PTP-kept rates"), "Compare PTP-kept rates between accounts resolved on first call and transferred calls" and "What % of contacted accounts result in a PTP, by FCR vs non-FCR?". One row per call outcome (Resolved first time, Transferred, Not resolved, not transferred, No contact) over 12 months of account-months: how many promised to pay (Promise_Rate), how many of those promises broke or were kept, the amounts and average handle time. Observed, not causal.';
+COMMENT ON TABLE {{catalog}}.{{prefix}}_gold.qry_fcr_vs_promises IS 'Answers the Scenario Guide''s "Contact Center Efficiency vs Collections" ("Compare FCR rates against PTP-kept rates"), "Compare PTP-kept rates between accounts resolved on first call and transferred calls" and "What % of contacted accounts result in a PTP, by FCR vs non-FCR?". One row per call outcome (Resolved first time, Transferred, Not resolved, not transferred, No contact) over 12 months of account-months: how many promised to pay (Promise_Rate), how many of those promises broke or were kept, the amounts and average handle time. Observed, not causal.';
 COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_fcr_vs_promises.Promise_Rate IS 'Account-months with a promise / account-months with this call outcome';
 COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_fcr_vs_promises.Kept_Rate IS 'Kept promises / promises made with this call outcome';
 COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_fcr_vs_promises.Avg_Handle_Seconds IS 'Average handle time in seconds (NULL for No contact)';
@@ -268,7 +268,7 @@ SELECT a.State, a.Product_Type,
 FROM {{catalog}}.{{prefix}}_gold.qry_account_month a CROSS JOIN {{catalog}}.{{prefix}}_gold.qry_rules r
 WHERE a.Contacted_Flag = 1
 GROUP BY a.State, a.Product_Type;
-COMMENT ON TABLE {{catalog}}.{{prefix}}_gold.qry_transfer_cost IS 'Answers the Scenario_Guide''s "Transfer-Driven Cost Leakage" ("accounts with high transfer rates + high AHT, by state and product"). One row per state x product over 12 months of contacted account-months: transfers, transfer rate, average handle time for transferred and other calls, and hours of handle time on transferred calls. Transferred_Handle_Cost is NULL until business rule handle_cost_per_minute is set: never state a dollar cost of handle time otherwise. Sum the rows for a state or product total, and recompute rates as SUM/SUM.';
+COMMENT ON TABLE {{catalog}}.{{prefix}}_gold.qry_transfer_cost IS 'Answers the Scenario Guide''s "Transfer-Driven Cost Leakage" ("accounts with high transfer rates + high AHT, by state and product"). One row per state x product over 12 months of contacted account-months: transfers, transfer rate, average handle time for transferred and other calls, and hours of handle time on transferred calls. Transferred_Handle_Cost is NULL until business rule handle_cost_per_minute is set: never state a dollar cost of handle time otherwise. Sum the rows for a state or product total, and recompute rates as SUM/SUM.';
 COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_transfer_cost.Transferred_Handle_Cost IS 'Transferred handle minutes x handle_cost_per_minute (AUD); NULL while that rule is not set';
 
 -- 7. Scenario "Repeat Caller Frustration": repeat calls by last month's call outcome.
@@ -283,17 +283,17 @@ SELECT Prior_Month_Outcome,
 FROM {{catalog}}.{{prefix}}_gold.qry_account_month
 WHERE Contacted_Flag = 1
 GROUP BY Prior_Month_Outcome;
-COMMENT ON TABLE {{catalog}}.{{prefix}}_gold.qry_repeat_after_unresolved IS 'Answers the Scenario_Guide''s "Repeat Caller Frustration" (Repeat_Call_Flag = Y AND prior month FCR = N): how often a contacted customer calls again (within about 7-14 days) depending on how last month''s call went. One row per last-month outcome over 12 months of contacted account-months. The accounts themselves: qry_account_month WHERE Repeat_After_Unresolved_Flag = 1.';
+COMMENT ON TABLE {{catalog}}.{{prefix}}_gold.qry_repeat_after_unresolved IS 'Answers the Scenario Guide''s "Repeat Caller Frustration" (Repeat_Call_Flag = Y AND prior month FCR = N): how often a contacted customer calls again (within about 7-14 days) depending on how last month''s call went. One row per last-month outcome over 12 months of contacted account-months. The accounts themselves: qry_account_month WHERE Repeat_After_Unresolved_Flag = 1.';
 COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_repeat_after_unresolved.Repeat_Rate IS 'Repeat calls / contacted account-months with this last-month outcome';
 
--- 8. The Scenario_Guide's account scenarios at the latest snapshot.
+-- 8. The Scenario Guide's account scenarios at the latest snapshot.
 CREATE OR REPLACE VIEW {{catalog}}.{{prefix}}_gold.qry_scenario_accounts AS
 WITH a AS (SELECT * FROM {{catalog}}.{{prefix}}_gold.qry_account_month WHERE Is_Latest_Snapshot = 1)
 SELECT 1 AS Scenario_ID, 'Upgrade-but-Overdue' AS Scenario_Name, a.* FROM a WHERE Scenario_1_Flag = 1
 UNION ALL SELECT 2, 'High-Risk Porting Out', a.* FROM a WHERE Scenario_2_Flag = 1
 UNION ALL SELECT 3, 'Churn Risk at Renewal', a.* FROM a WHERE Scenario_3_Flag = 1
 UNION ALL SELECT 6, 'Repeat Caller Frustration', a.* FROM a WHERE Repeat_After_Unresolved_Flag = 1;
-COMMENT ON TABLE {{catalog}}.{{prefix}}_gold.qry_scenario_accounts IS 'Answers: "Show accounts with New_Product_Interest = Y and overdue", "List customers porting out with Credit_Score < 550 ranked by balance", "customers with 2+ missed payments entering renewal" and the repeat callers after an unresolved call. One row per account per scenario at the latest snapshot (1 October 2026), with every qry_account_month column. Scenario_ID 1-3 and 6 follow the Scenario_Guide (4 and 5 are analytical: qry_fcr_vs_promises and qry_transfer_cost). An account can be in more than one scenario.';
+COMMENT ON TABLE {{catalog}}.{{prefix}}_gold.qry_scenario_accounts IS 'Answers: "Show accounts with New_Product_Interest = Y and overdue", "List customers porting out with Credit_Score < 550 ranked by balance", "customers with 2+ missed payments entering renewal" and the repeat callers after an unresolved call. One row per account per scenario at the latest snapshot (1 October 2026), with every qry_account_month column. Scenario_ID 1-3 and 6 follow the Scenario Guide (4 and 5 are analytical: qry_fcr_vs_promises and qry_transfer_cost). An account can be in more than one scenario.';
 
 CREATE OR REPLACE VIEW {{catalog}}.{{prefix}}_gold.qry_scenario_summary AS
 WITH r AS (SELECT * FROM {{catalog}}.{{prefix}}_gold.qry_rules),
@@ -322,7 +322,7 @@ SELECT s.*,
     WHEN 3 THEN 'Chronic late payers approaching contract renewal: proactive retention and a payment plan.'
     ELSE 'Customers calling again after an unresolved call: churn and complaint risk.' END AS Business_Question
 FROM s CROSS JOIN r;
-COMMENT ON TABLE {{catalog}}.{{prefix}}_gold.qry_scenario_summary IS 'Answers: "How many accounts are in each scenario, and what do they owe?" One row per account scenario of the Scenario_Guide at the latest snapshot (1 October 2026): 1 Upgrade-but-Overdue, 2 High-Risk Porting Out, 3 Churn Risk at Renewal, 6 Repeat Caller Frustration. Accounts, balances, promises and broken rate, with the filter in force (thresholds from business_rules_config). The accounts: qry_scenario_accounts.';
+COMMENT ON TABLE {{catalog}}.{{prefix}}_gold.qry_scenario_summary IS 'Answers: "How many accounts are in each scenario, and what do they owe?" One row per account scenario of the Scenario Guide at the latest snapshot (1 October 2026): 1 Upgrade-but-Overdue, 2 High-Risk Porting Out, 3 Churn Risk at Renewal, 6 Repeat Caller Frustration. Accounts, balances, promises and broken rate, with the filter in force (thresholds from business_rules_config). The accounts: qry_scenario_accounts.';
 
 -- 9. Overdue exposure by days past due, latest month.
 CREATE OR REPLACE VIEW {{catalog}}.{{prefix}}_gold.qry_dpd_exposure AS

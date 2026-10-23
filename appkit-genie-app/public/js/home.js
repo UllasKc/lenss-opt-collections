@@ -2,7 +2,7 @@
 // The one-minute view of Optus collections for a collections leader, told as one story in five
 // chapters: where promises to pay stand this month, why they break, how the contact centre is
 // doing and what it does to promises, where the money is, and which customers need a different
-// conversation (the Scenario_Guide's scenarios).
+// conversation (the Scenario Guide's scenarios).
 // The "why" with filters lives in the Explorer (explorer.js). Every figure comes from the certified
 // views (no AI) and opens the accounts behind it. Each panel has an "Ask LensS" link that opens
 // the assistant with the right question.
@@ -25,8 +25,10 @@ const pct = (v, d = 1) => (num(v) === null ? '—' : (num(v) * 100).toFixed(d) +
 const count = v => (num(v) === null ? '—' : Math.round(num(v)).toLocaleString('en-AU'));
 /** Seconds of handle time: "530s". */
 const secs = v => (num(v) === null ? '—' : `${Math.round(num(v))}s`);
-/** A difference between two shares, in points: "+17.2 pts". */
-const pts = (v, d = 1) => (num(v) === null ? '—' : `${num(v) >= 0 ? '+' : '−'}${Math.abs(num(v) * 100).toFixed(d)} pts`);
+/** A factor's broken rates, lowest to highest segment: "37.9% to 57.0% broken". Ranges, not "pts", which read as a percentage. */
+const brokenRange = (f, d = 1) => `${pct(f.lo.Broken_Rate, d)} to ${pct(f.hi.Broken_Rate, d)} broken`;
+/** The share of contacted customers left unresolved: neither resolved first time nor transferred (the three add up to 100%). */
+const unresolvedRate = s => (num(s.FCR_Rate) === null || num(s.Transfer_Rate) === null ? null : Math.max(0, 1 - num(s.FCR_Rate) - num(s.Transfer_Rate)));
 /** "1 October 2026" and "October 2026" from "2026-10-01". */
 const asOfDate = d => { const x = d ? new Date(String(d).slice(0, 10) + 'T00:00:00') : null; return x && !isNaN(x) ? x.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'; };
 const monthLabel = d => { const x = d ? new Date(String(d).slice(0, 10) + 'T00:00:00') : null; return x && !isNaN(x) ? x.toLocaleDateString('en-AU', { month: 'long', year: 'numeric' }) : 'the latest month'; };
@@ -88,12 +90,13 @@ const KPI_DICT = [
   ['Kept-promise rate', 'The inverse of the broken rate.', 'Kept promises ÷ promises made.'],
   ['Resolved first time (FCR)', 'Contact-centre effectiveness.', 'Contacted accounts whose issue was resolved on the first call ÷ contacted accounts. A transferred call is never FCR. Contact is recorded once per account per month.'],
   ['Transferred', 'Calls that needed a second agent.', 'Contacted accounts whose call was transferred ÷ contacted accounts.'],
+  ['Left unresolved', 'Calls that ended without a fix.', 'Contacted accounts neither resolved first time nor transferred ÷ contacted accounts. Resolved first time, transferred and left unresolved add up to 100%; calling again is counted separately.'],
   ['Called again (repeat)', 'Customers who had to come back.', 'Contacted accounts that called again within about 7 to 14 days (Optus\'s repeat-call flag) ÷ contacted accounts.'],
   ['Repeat after an unresolved call', 'Scenario 6, Repeat Caller Frustration.', 'Accounts that called again this month after a call last month that was not resolved first time.'],
   ['Average handle time', 'Effort per call.', 'Average handle time in seconds of contacted accounts. No cost per minute has been supplied, so no dollar cost is shown.'],
-  ['Why promises break', 'Where to act.', 'The broken-promise rate of each segment over 12 months of promises. A factor makes a clear difference when its segments (30+ promises each) are at least 10 points apart (business rule driver_spread_pts); otherwise little difference. Observed, not causal.'],
+  ['Why promises break', 'Where to act.', 'The broken-promise rate of each segment over 12 months of promises. A factor makes a clear difference when its segments (30+ promises each) are at least 10 percentage points apart (business rule driver_spread_pts); otherwise little difference. Observed, not causal.'],
   ['Credit band / days-past-due bucket', 'The bands used everywhere.', 'Credit score below 550, 550–649, 650–749, 750+. Days past due 1–30, 31–60, 61–90, 91+. Both come from the business rules.'],
-  ['Scenarios 1–6', 'Optus\'s Scenario_Guide.', '1 Upgrade-but-Overdue: new product interest and more than 30 days past due. 2 High-Risk Porting Out: porting out with a credit score below 550. 3 Churn Risk at Renewal: 2+ missed payments in the renewal window. 4 FCR against kept promises. 5 Transfers and handle time. 6 Repeat calls after an unresolved call. Counts are at the latest snapshot.'],
+  ['Scenarios 1–6', 'Optus\'s Scenario Guide.', '1 Upgrade-but-Overdue: new product interest and more than 30 days past due. 2 High-Risk Porting Out: porting out with a credit score below 550. 3 Churn Risk at Renewal: 2+ missed payments in the renewal window. 4 FCR against kept promises. 5 Transfers and handle time. 6 Repeat calls after an unresolved call. Counts are at the latest snapshot.'],
 ];
 function openKpiDict() {
   document.getElementById('kpiDictBody').innerHTML = `<p class="score-reason">Optus collections, 12 monthly snapshots (November 2025 to October 2026), amounts in Australian dollars. Every figure comes from certified views; no AI computes them.</p>
@@ -164,10 +167,12 @@ function renderHero(s) {
   document.getElementById('heroProgress').innerHTML = total ? `
     <div class="hp-track"><div class="hp-fill" style="width:${(100 * kept / total).toFixed(1)}%"></div></div>
     <div class="hp-legend"><span><b>${count(kept)}</b> kept (${money(s.Kept_Amount)}) · <b>${count(broken)}</b> broken (${money(s.Broken_Amount)})</span><span>${pct(kept / total, 0)} kept</span></div>` : '';
+  // The change is the balance's, not the accounts': "balance down $25K (2.5%) from $1.04M in September".
   const prior = num(s.Prior_Overdue_Balance);
-  const change = prior ? (num(s.Overdue_Balance) - prior) / prior : null;
+  const diff = prior ? num(s.Overdue_Balance) - prior : null;
+  const priorMonth = s.prior_date ? monthLabel(s.prior_date).split(' ')[0] : 'the month before';
   document.getElementById('heroStats').innerHTML = [
-    ['Overdue balance', money(s.Overdue_Balance), `${count(s.Overdue_Accounts)} accounts${change !== null ? ` · ${change >= 0 ? 'up' : 'down'} ${pct(Math.abs(change))} on last month` : ''}`, 'cash',
+    ['Overdue balance', money(s.Overdue_Balance), `${count(s.Overdue_Accounts)} accounts${diff !== null ? ` · balance ${diff >= 0 ? 'up' : 'down'} ${money(Math.abs(diff), 0)} (${pct(Math.abs(diff) / prior)}) from ${money(prior)} in ${hEsc(priorMonth)}` : ''}`, 'cash',
       viewBtn('overdue', 'View accounts', '', `Overdue accounts, ${month}`, true)],
     ['Promises broken', pct(s.Broken_Rate), `${count(s.Broken_Promises)} of ${count(s.Promises)} · last month ${pct(s.Prior_Broken_Rate)}`, 'promise',
       viewBtn('broken', 'View broken', '', `Broken promises, ${month}`, true)],
@@ -180,7 +185,7 @@ function renderHero(s) {
   const when = (v) => { const d = v ? new Date(v.replace(' ', 'T') + 'Z') : null; return d && !isNaN(d) ? d.toLocaleString('en-AU') : v; };
   const after = num(s.Promises_Due_After_As_Of);
   document.getElementById('heroNote').innerHTML =
-    (after ? `<div>All ${count(after)} of this month's promises fall due after ${hEsc(asOfDate(s.as_of))}. Their outcome is as recorded in the data, like every other month.</div>` : '') +
+    (after ? `<div>${after === num(s.Promises) ? 'All ' : ''}${count(after)} of this month's promises fall due after ${hEsc(asOfDate(s.as_of))}. Their outcome is as recorded in the data, like every other month.</div>` : '') +
     (s.data_refreshed_at ? `<div class="hero-refresh">Data refreshed on ${when(s.data_refreshed_at)}</div>` : '');
 }
 
@@ -208,8 +213,8 @@ function renderExecSummary(s, o) {
     ['ch1', 'Promises this month', `${count(s.Promises)} promises worth ${money(s.Promised_Amount)} in ${month}; ${count(s.Broken_Promises)} broken (${money(s.Broken_Amount)}), against ${pct(s.Broken_Rate_12M)} over 12 months.`,
       pct(s.Broken_Rate), 'broken', 'bad'],
     ['ch2', 'Why they break', top ? `${strong.map(f => f.factor.toLowerCase()).join(', ')} make a clear difference; the widest gap is ${top.factor.toLowerCase()}: ${pct(top.hi.Broken_Rate)} broken for ${top.hi.Segment.toLowerCase()} against ${pct(top.lo.Broken_Rate)} for ${top.lo.Segment.toLowerCase()}.` : 'No factor makes a clear difference.',
-      top ? pts(top.spread, 0) : '—', top ? `${top.factor.toLowerCase()} gap` : '', 'warn'],
-    ['ch3', 'Contact centre', `${pct(s.FCR_Rate)} resolved first time, ${pct(s.Transfer_Rate)} transferred and ${pct(s.Repeat_Rate)} called again in ${month}; a transferred call averages ${secs(xfer.Avg_Handle_Seconds)} against ${secs(fcr.Avg_Handle_Seconds)} when resolved first time.`,
+      top ? `${pct(top.lo.Broken_Rate, 0)}–${pct(top.hi.Broken_Rate, 0)}` : '—', top ? `broken, by ${top.factor.toLowerCase()}` : '', 'warn'],
+    ['ch3', 'Contact centre', `Of the customers contacted in ${month}, ${pct(s.FCR_Rate)} were resolved first time, ${pct(s.Transfer_Rate)} transferred and ${pct(unresolvedRate(s))} left unresolved; separately, ${pct(s.Repeat_Rate)} called again within about two weeks. A transferred call averages ${secs(xfer.Avg_Handle_Seconds)} against ${secs(fcr.Avg_Handle_Seconds)} when resolved first time.`,
       pct(s.FCR_Rate), 'resolved first time', 'brand'],
     ['ch4', 'Where the money is', `${money(s.Overdue_Balance)} overdue across ${count(s.Overdue_Accounts)} accounts${biggest ? `; the most, ${money(biggest.Overdue_Balance)} (${pct(biggest.Balance_Share, 0)}), is ${hEsc(biggest.DPD_Bucket)} days past due` : ''}.`,
       money(s.Overdue_Balance), 'overdue', 'brand'],
@@ -244,7 +249,8 @@ function renderDrivers(s, o) {
   const all = factorsOf(o.drivers);
   if (!all.length) return;
   const strong = strongFactors(o.drivers);
-  const flat = all.filter(f => !strong.includes(f)).sort((a, b) => a.order - b.order);
+  const strongNames = new Set(strong.map(f => f.factor));
+  const flat = all.filter(f => !strongNames.has(f.factor)).sort((a, b) => a.order - b.order);
   const overall = num((o.drivers[0] || {}).Overall_Broken_Rate);
   const minP = ruleVal(s, 'min_segment_promises', 30);
   setTake('ch2Take', `Over 12 months, customers made <b>${count(s.Promises_12M)}</b> promises and <b>${pct(s.Broken_Rate_12M)}</b> were broken (${money(s.Broken_Amount_12M)}). ` +
@@ -263,11 +269,11 @@ function renderDrivers(s, o) {
         overall, `Overall ${pct(overall)}`, few ? 'muted-row' : '');
     }).join('');
     return `<div class="card panel driver-card"><div class="panel-head"><div><h3>${hEsc(f.factor)}</h3>
-        <div class="panel-sub"><span class="strength clear">Clear difference · ${pts(f.spread, 0).replace('+', '')}</span> ${pct(f.hi.Broken_Rate)} broken for <b>${hEsc(f.hi.Segment)}</b>, ${pct(f.lo.Broken_Rate)} for <b>${hEsc(f.lo.Segment)}</b></div></div>
+        <div class="panel-sub"><span class="strength clear">Clear difference: ${brokenRange(f)}</span> ${pct(f.hi.Broken_Rate)} for <b>${hEsc(f.hi.Segment)}</b>, ${pct(f.lo.Broken_Rate)} for <b>${hEsc(f.lo.Segment)}</b></div></div>
         ${askBtn(`Why do promises to pay break more often for some ${f.factor.toLowerCase()} segments, and what should we do about it?`, 'agent')}</div>
       <div class="panel-body">${body}<div class="panel-note">The line marks the overall broken rate (${pct(overall)}), 12 months of promises.</div></div></div>`;
   }).join('');
-  panel('pnlFlat', 'Factors that make little difference', `Their segments' broken rates are within ${pts(ruleVal(s, 'driver_spread_pts', 0.10), 0).replace('+', '')} of each other: knowing them doesn't tell you which promises will break.`,
+  panel('pnlFlat', 'Factors that make little difference', `Their segments' broken rates differ by less than ${Math.round(ruleVal(s, 'driver_spread_pts', 0.10) * 100)} percentage points: knowing them doesn't tell you which promises will break.`,
     { q: 'Do product, state, porting status, contract renewal or new product interest affect whether promises to pay are broken?', mode: 'chat' },
     `<div class="flat-list">${flat.map(f => `<div class="flat-item"><b>${hEsc(f.factor)}</b><span>${f.lo ? `${pct(f.lo.Broken_Rate)} to ${pct(f.hi.Broken_Rate)} broken across ${count(f.rows.length)} segments` : 'Too few promises to compare'}</span>
       <div class="card-btns">${f.hi ? viewBtn('segment_broken', `View ${f.hi.Segment}`, `${f.factor}|${f.hi.Segment}`, `Broken promises: ${f.factor.toLowerCase()} ${f.hi.Segment}, 12 months`, true) : ''}</div></div>`).join('') || '<div class="empty-note">Every factor makes a clear difference.</div>'}</div>`);
@@ -278,7 +284,7 @@ function renderContact(s, o) {
   const month = monthLabel(s.as_of);
   const fcr = outcomeRow(o, 'Resolved first time'), xfer = outcomeRow(o, 'Transferred'), unres = outcomeRow(o, 'Not resolved, not transferred');
   setTake('ch3Take', `In ${hEsc(month)}, <b>${pct(s.FCR_Rate)}</b> of the ${count(s.Contacts)} contacted customers were resolved first time (${pct(s.FCR_Rate_12M)} over 12 months), ` +
-    `<b>${pct(s.Transfer_Rate)}</b> were transferred and <b>${pct(s.Repeat_Rate)}</b> called again. ` +
+    `<b>${pct(s.Transfer_Rate)}</b> were transferred and <b>${pct(unresolvedRate(s))}</b> were left unresolved. Separately, <b>${pct(s.Repeat_Rate)}</b> called again within about two weeks. ` +
     (num(fcr.Broken_Rate) !== null ? `How the call goes shows up in promises: <b>${pct(xfer.Broken_Rate)}</b> of promises made after a transfer broke, and ${pct(unres.Broken_Rate)} after an unresolved call, against <b>${pct(fcr.Broken_Rate)}</b> after a first-time resolution.` : ''));
   const card = (ic, label, value, sub, why, t, view = '') => `
     <div class="xkpi${t ? ' x-' + t : ''}" title="${hEsc(why)}">
@@ -309,7 +315,7 @@ function renderContact(s, o) {
       `${count(r.Promises)} promises · promised in ${pct(r.Promise_Rate, 0)} of these months ` +
       viewBtn('segment_broken', 'View broken', `Call outcome|${r.Call_Outcome}`, `Broken promises after: ${r.Call_Outcome.toLowerCase()}, 12 months`, true),
       overall, `Overall ${pct(overall)}`)).join('') +
-    `<div class="panel-note">"No contact" means no call was recorded that month; the data doesn't say how those promises were made. Observed, not a controlled experiment.</div>`);
+    `<div class="panel-note">"No contact" means no contact-centre contact was recorded that month; these promises were made another way (app, SMS, IVR, online, store), and the data doesn't say which. Observed, not a controlled experiment.</div>`);
 
   // Scenario 5: transfers and handle time.
   const nonXfer = outcomes.filter(r => r.Call_Outcome === 'Resolved first time' || r.Call_Outcome === 'Not resolved, not transferred');
@@ -390,7 +396,7 @@ function renderTrend(o, key) {
   });
 }
 
-/** 5. Which customers need a different conversation? The Scenario_Guide's six scenarios. */
+/** 5. Which customers need a different conversation? The Scenario Guide's six scenarios. */
 function renderScenarios(s, o) {
   const month = monthLabel(s.as_of);
   const scen = o.scenarios || [];
@@ -398,7 +404,7 @@ function renderScenarios(s, o) {
   const r = (n, f) => count(ruleVal(s, n, f));
   const fcr = outcomeRow(o, 'Resolved first time'), xfer = outcomeRow(o, 'Transferred');
   const xferHours = (o.transferByState || []).reduce((a, x) => a + num(x.Transferred_Handle_Hours), 0);
-  setTake('ch5Take', `Optus's Scenario_Guide picks out four groups of accounts in ${hEsc(month)}, plus two contact-centre patterns (chapter 3). ` +
+  setTake('ch5Take', `Optus's Scenario Guide picks out four groups of accounts in ${hEsc(month)}, plus two contact-centre patterns (chapter 3). ` +
     `The largest is <b>${count(Math.max(...scen.map(x => num(x.Accounts) || 0), 0))}</b> accounts; an account can be in more than one.`);
   const asks = {
     1: `Which customers are interested in a new product but more than ${r('s1_min_dpd', 30)} days overdue, and how should we approach them?`,
@@ -419,8 +425,8 @@ function renderScenarios(s, o) {
       <div class="card-btns"><a class="view-btn" href="#ch3">See chapter 3</a>${askBtn(q, 'agent')}</div></div>`;
   document.getElementById('scenarios').innerHTML = [
     accountCard(1), accountCard(2), accountCard(3),
-    patternCard(4, 'Contact Center Efficiency vs Collections', pct(num(xfer.Broken_Rate) - num(fcr.Broken_Rate), 0).replace('%', ' pts'), 'more broken after a transfer',
-      `${pct(fcr.Broken_Rate)} of promises broke after a first-time resolution, ${pct(xfer.Broken_Rate)} after a transfer (12 months).`,
+    patternCard(4, 'Contact Center Efficiency vs Collections', pct(xfer.Broken_Rate), 'broken after a transfer',
+      `Against ${pct(fcr.Broken_Rate)} after a first-time resolution: promises made after a transfer break more often (12 months).`,
       'Compare FCR rates against promise-kept rates: does agent quality drive recovery?'),
     patternCard(5, 'Transfer-Driven Cost Leakage', count(xferHours), 'hours on transferred calls',
       `Transferred calls average ${secs(xfer.Avg_Handle_Seconds)}; shown in hours because no cost per minute has been supplied.`,
@@ -442,7 +448,7 @@ function renderTopBroken(s, o) {
       <td>${money(r.PTP_Amount)} <span class="muted">due ${hEsc(String(r.PTP_Due_Date || '').slice(0, 10))}</span></td>
       <td>${count(r.Credit_Score)}</td><td>${hEsc(r.Call_Outcome)}</td></tr>`).join('') || '<tr><td colspan="7" class="empty-note">No broken promises this month.</td></tr>'}</tbody></table></div>`;
   panel('pnlTopBroken', `The ${count(n)} broken promises with the most at stake`, `${hEsc(month)}, largest outstanding balance first. The 8 largest are shown. ${viewBtn('top_broken', `View all ${count(n)}`, '', `Top ${count(n)} broken promises, ${month}`, true)}`,
-    { q: `Show me the top ${count(n)} accounts by outstanding balance where the promise to pay was broken last month.`, mode: 'chat' }, body);
+    { q: `Show me the top ${count(n)} accounts by outstanding balance where the promise to pay was broken in the latest month.`, mode: 'chat' }, body);
 }
 
 // ---------------------------------------------------------------- the accounts behind a figure

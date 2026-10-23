@@ -2,7 +2,7 @@
  * The suggested questions: the six tiles on an empty chat, plus four more in
  * the side panel (five per mode). One list, served to the front end and used
  * to pre-warm the answer cache. Built from Optus's Sample_BI_Questions and
- * Scenario_Guide; check each against the live Genie space before a demo.
+ * Scenario Guide; check each against the live Genie space before a demo.
  */
 export interface Suggestion {
   mode: 'chat' | 'agent';

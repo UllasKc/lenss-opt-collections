@@ -152,8 +152,9 @@
     const others = Object.keys(d.applied || {}).some(k => k !== 'month');
     document.getElementById('xpMatch').innerHTML = `${count(t.accounts)} accounts${others ? ` of ${count(b.accounts)}` : ''} · ${hEsc(periodText())}` +
       (num(t.overdue_balance) ? ` · ${money(t.overdue_balance)} overdue${num(t.months) > 1 ? ' a month on average' : ''}` : '');
-    const steps = [renderKpis, renderSlicer, renderOutcome, renderTrend, renderAccountsTable];
+    const steps = [renderKpis, renderSlicer, renderMoney, renderMix, renderOutcome, renderTrend, renderAccountsTable];
     steps.forEach(fn => { try { fn(d); } catch (err) { console.error('Explorer panel failed', fn.name, err); } });
+    loadHeat();
   }
 
   // ---- filtered headline measures, compared with the whole book in the same period
@@ -164,9 +165,10 @@
     const delta = (key, good) => {
       if (!others || num(t[key]) === null || num(b[key]) === null) return '';
       const diff = num(t[key]) - num(b[key]);
-      const shown = key === 'avg_handle' ? `${diff >= 0 ? '+' : '−'}${Math.abs(Math.round(diff))}s` : `${diff >= 0 ? '+' : '−'}${Math.abs(diff * 100).toFixed(1)} pts`;
+      // The whole book's figure, not a gap in "pts" (which reads as a percentage).
+      const shown = key === 'avg_handle' ? secs(b[key]) : pct(b[key]);
       const better = good ? diff > 0 : diff < 0;
-      return `<span class="xk-d ${Math.abs(diff) < 1e-9 ? '' : better ? 'up' : 'down'}">${shown} vs whole book</span>`;
+      return `<span class="xk-d ${Math.abs(diff) < 1e-9 ? '' : better ? 'up' : 'down'}">whole book ${shown}</span>`;
     };
     const share = (key) => (others && num(b[key]) ? `<span class="xk-d">${pct(num(t[key]) / num(b[key]), 1)} of the book</span>` : '');
     const several = num(t.months) > 1;
@@ -227,7 +229,7 @@
       </div></div>
       <div class="panel-body">${rows.length ? (state.view === 'table' ? table : `<div class="xs-list">${bars}</div>`) : '<div class="empty-note">No accounts match these filters.</div>'}
       ${drillable && rows.length > 1 && state.view === 'bars' ? '<div class="panel-note">Click a bar to filter everything on this page to it.</div>' : ''}</div>`;
-    el.querySelector('#xsDim').addEventListener('change', e => { state.dim = e.target.value; remember(); renderSlicer(state.data); });
+    el.querySelector('#xsDim').addEventListener('change', e => { state.dim = e.target.value; remember(); renderSlicer(state.data); renderMoney(state.data); renderMix(state.data); });
     el.querySelector('#xsMeasure').addEventListener('change', e => { state.measure = e.target.value; remember(); renderSlicer(state.data); });
     el.querySelectorAll('.xs-view button').forEach(b => b.addEventListener('click', () => { state.view = b.dataset.v; renderSlicer(state.data); }));
     el.querySelectorAll('[data-drill]').forEach(b => b.addEventListener('click', () => setFilter(state.dim, b.dataset.drill)));
@@ -254,13 +256,177 @@
       ${rows.map(r => `<tr${state.filters.month === r.k ? ' class="hl"' : ''}><td>${hEsc(r.k)}</td><td>${money(r.overdue_balance)}</td><td>${count(r.promises)}</td>${keys.map(([k, , f]) => `<td>${f(r[k])}</td>`).join('')}
         <td>${xpView({ month: r.k }, `${r.k}: accounts`)}</td></tr>`).join('')}</tbody></table></div>`;
     panel('xpTrend', '12-month trend of this view', 'Every filter except the month; the selected month is highlighted',
-      ask('How have the broken-promise rate and first contact resolution changed month by month', 'chat'), body);
+      ask('How have the broken-promise rate and first contact resolution changed month by month', 'chat'),
+      '<div class="xp-chart short"><canvas id="xpTrendChart" role="img" aria-label="Broken, FCR, transferred and repeat rates by month"></canvas></div>' + body);
+    const colors = ['#DC2626', '#0E8F80', '#D97706', '#7C3AED'];
+    chartIn('xpTrendChart', {
+      type: 'line',
+      data: { labels: rows.map(r => r.k), datasets: keys.map(([k, l], i) => ({ label: l, data: rows.map(r => num(r[k])), borderColor: colors[i], backgroundColor: colors[i], tension: .3, pointRadius: 2 })) },
+      options: { maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { position: 'bottom', labels: { boxWidth: 10 } }, tooltip: { callbacks: { label: c => `${c.dataset.label}: ${pct(c.parsed.y)}` } } },
+        scales: { y: { min: 0, ticks: { callback: v => pct(v, 0) } } } },
+    });
+  }
+
+  // ---- charts (Chart.js, loaded before the app); one instance per canvas, replaced on redraw
+  const charts = {};
+  function chartIn(id, cfg) {
+    if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+    const cv = document.getElementById(id);
+    if (window.Chart && cv) charts[id] = new Chart(cv, cfg);
+  }
+  const dimLabel = (k) => (state.dim === 'bucket' && k !== 'Current' ? `${k} days` : k);
+  const stacked = (fmt, max) => ({
+    indexAxis: 'y', maintainAspectRatio: false,
+    plugins: { legend: { position: 'bottom', labels: { boxWidth: 10 } }, tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmt(c.parsed.x)}` } } },
+    scales: { x: { stacked: true, ...(max ? { max } : {}), ticks: { callback: v => fmt(v) } }, y: { stacked: true } },
+  });
+  /** Rows of the slicer's dimension, in its natural order (or the most promised first). */
+  const dimRows = (d) => {
+    const rows = (d.by[state.dim] || []).slice();
+    if (!rows.some(r => r.ord !== null && r.ord !== undefined && r.ord !== 'NULL')) rows.sort((a, b) => num(b.promised_amount) - num(a.promised_amount));
+    return rows;
+  };
+
+  // ---- the promised money, kept and broken, by the slicer's dimension
+  function renderMoney(d) {
+    const rows = dimRows(d);
+    const t = d.totals || {};
+    panel('xpMoney', `Promised money: kept and broken, by ${DIM_LABEL[state.dim].toLowerCase()}`,
+      `${hEsc(periodText())}: ${money(t.promised_amount)} promised, ${money(t.broken_amount)} of it broken (${pct(num(t.broken_amount) / num(t.promised_amount))})`,
+      ask(`Where is the most promised money broken, by ${DIM_LABEL[state.dim].toLowerCase()}`, 'chat'),
+      rows.length ? '<div class="xp-chart"><canvas id="xpMoneyChart" role="img" aria-label="Promised amount kept and broken"></canvas></div>' : '<div class="empty-note">No promises in this view.</div>');
+    chartIn('xpMoneyChart', {
+      type: 'bar',
+      data: { labels: rows.map(r => dimLabel(r.k)), datasets: [
+        { label: 'Kept', data: rows.map(r => (num(r.promised_amount) || 0) - (num(r.broken_amount) || 0)), backgroundColor: '#0E8F80' },
+        { label: 'Broken', data: rows.map(r => num(r.broken_amount) || 0), backgroundColor: '#DC2626' },
+      ] },
+      options: stacked(v => money(v, 0)),
+    });
+  }
+
+  // ---- how the month's contact went, by the slicer's dimension (shares of account-months, adding up to 100%)
+  function renderMix(d) {
+    const rows = dimRows(d);
+    const part = (r) => {
+      const n = num(r.account_months) || 0, c = num(r.contacts) || 0;
+      const res = c * (num(r.fcr_rate) || 0), xf = c * (num(r.transfer_rate) || 0);
+      return n ? [res / n, xf / n, Math.max(0, c - res - xf) / n, Math.max(0, n - c) / n] : [0, 0, 0, 0];
+    };
+    const parts = rows.map(part);
+    const names = [['Resolved first time', '#0E8F80'], ['Transferred', '#D97706'], ['Left unresolved', '#DC2626'], ['No contact', '#CBD5E1']];
+    panel('xpMix', `Call outcomes by ${DIM_LABEL[state.dim].toLowerCase()}`,
+      `${hEsc(periodText())}: share of account-months by how that month's contact went (the four add up to 100%)`,
+      ask(`Compare first contact resolution and transfers by ${DIM_LABEL[state.dim].toLowerCase()}`, 'chat'),
+      rows.length ? '<div class="xp-chart"><canvas id="xpMixChart" role="img" aria-label="Call outcome mix"></canvas></div>' : '<div class="empty-note">No accounts in this view.</div>');
+    chartIn('xpMixChart', {
+      type: 'bar',
+      data: { labels: rows.map(r => dimLabel(r.k)), datasets: names.map(([l, c], i) => ({ label: l, data: parts.map(p => p[i]), backgroundColor: c })) },
+      options: stacked(v => pct(v, 0), 1),
+    });
+  }
+
+  // ---- two dimensions at once: product by arrears stage (or any pair), coloured against this view
+  const HEAT_MEASURES = {
+    broken_rate: { label: 'Broken-promise rate', good: false, base: 'promises', unit: 'promises' },
+    kept_rate: { label: 'Kept-promise rate', good: true, base: 'promises', unit: 'promises' },
+    promise_rate: { label: 'Promise rate (promises ÷ account-months)', good: true, base: 'account_months', unit: 'account-months' },
+    fcr_rate: { label: 'Resolved first time (FCR)', good: true, base: 'contacts', unit: 'contacts' },
+    transfer_rate: { label: 'Transferred', good: false, base: 'contacts', unit: 'contacts' },
+    repeat_rate: { label: 'Called again (repeat)', good: false, base: 'contacts', unit: 'contacts' },
+    overdue_balance: { label: 'Overdue balance', amount: true },
+  };
+  const HEAT_DIMS = [...SLICE_DIMS, 'month'];
+  const heat = { rows: 'product', cols: 'bucket', measure: 'broken_rate', seq: 0, data: null };
+  try {
+    const h = JSON.parse(localStorage.getItem('lenss.optus.heat') || '{}');
+    if (HEAT_DIMS.includes(h.rows) && HEAT_DIMS.includes(h.cols) && h.rows !== h.cols) Object.assign(heat, { rows: h.rows, cols: h.cols });
+    if (HEAT_MEASURES[h.measure]) heat.measure = h.measure;
+  } catch { /* ignore */ }
+  const rememberHeat = () => { try { localStorage.setItem('lenss.optus.heat', JSON.stringify({ rows: heat.rows, cols: heat.cols, measure: heat.measure })); } catch { /* ignore */ } };
+
+  async function loadHeat() {
+    const my = ++heat.seq;
+    const qs = new URLSearchParams({ ...Object.fromEntries(Object.entries(state.filters).filter(([, v]) => v)), rows: heat.rows, cols: heat.cols }).toString();
+    try {
+      const r = await fetch('/api/explorer/grid?' + qs);
+      const d = await r.json();
+      if (my !== heat.seq) return;
+      if (!r.ok) throw new Error(d.error || r.statusText);
+      heat.data = d;
+      renderHeat();
+    } catch (err) {
+      if (my !== heat.seq) return;
+      console.error('Explorer heatmap failed', err);
+      panel('xpHeat', 'Two dimensions at once', 'Could not load. Please try again.', null, '');
+    }
+  }
+
+  function renderHeat() {
+    const cells = heat.data?.cells || [];
+    const m = HEAT_MEASURES[heat.measure];
+    const overall = num((state.data?.totals || {})[heat.measure]);
+    const minP = 30;   // business rule min_segment_promises: fewer promises than this are faded
+    const axis = (key, ordKey) => {
+      const seen = new Map();
+      cells.forEach(c => { if (!seen.has(c[key])) seen.set(c[key], num(c[ordKey])); });
+      return [...seen.entries()].sort((a, b) => (a[1] ?? 0) - (b[1] ?? 0) || String(a[0]).localeCompare(String(b[0]))).map(([k]) => k);
+    };
+    const R = axis('r', 'r_ord'), C = axis('c', 'c_ord');
+    const at = new Map(cells.map(c => [`${c.r}|${c.c}`, c]));
+    const label = (dim, k) => (dim === 'bucket' && k !== 'Current' ? `${k} days` : k);
+    const maxAmt = Math.max(...cells.map(c => num(c.overdue_balance) || 0), 1);
+    const tone = (v) => {
+      if (m.amount || overall === null) return 'brand';
+      const diff = v - overall;
+      if (Math.abs(diff) < 0.05) return 'brand';
+      return (m.good ? diff > 0 : diff < 0) ? 'good' : 'bad';
+    };
+    const stage = m.amount ? 'overdue' : m.base === 'promises' ? (heat.measure === 'kept_rate' ? 'kept' : 'broken') : m.base === 'contacts' ? 'contacted' : 'promised';
+    const cellHtml = (rk, ck) => {
+      const c = at.get(`${rk}|${ck}`);
+      const v = c ? num(c[heat.measure]) : null;
+      if (!c || v === null) return '<div class="heat-c empty">—<small>none</small></div>';
+      const n = m.amount ? num(c.overdue_accounts) : num(c[m.base]);
+      const few = num(c.promises) < minP && (m.base === 'promises' || m.base === 'account_months');
+      const shown = m.amount ? money(v) : pct(v, 0);
+      const sub = m.amount ? `${count(n)} accounts` : `${count(n)} ${m.unit}`;
+      const style = m.amount ? ` style="opacity:${(0.35 + 0.65 * v / maxAmt).toFixed(2)}"` : '';
+      const where = `${label(heat.rows, rk)} · ${label(heat.cols, ck)}`;
+      return `<button class="heat-c t-${tone(v)}${few ? ' few' : ''}"${style} data-xpview="${hEsc(JSON.stringify({ [heat.rows]: rk, [heat.cols]: ck, stage }))}" data-title="${hEsc(where)}"
+        title="${hEsc(`${where}: ${m.label.toLowerCase()} ${shown}, ${sub}${few ? ` (fewer than ${minP} promises: read with care)` : ''}. Click to see the accounts.`)}">${shown}<small>${sub}</small></button>`;
+    };
+    const opts = (cur, other) => HEAT_DIMS.filter(k => k !== other).map(k => `<option value="${k}"${k === cur ? ' selected' : ''}>${hEsc(DIM_LABEL[k])}</option>`).join('');
+    const legend = m.amount ? '<span class="t-brand">Darker is more overdue</span>'
+      : `<span class="t-bad">Worse than this view by 5+ percentage points</span><span class="t-brand">Within 5 points of this view (${pct(overall)})</span><span class="t-good">Better by 5+ points</span>`;
+    const body = R.length && C.length
+      ? `<div class="table-scroll flat"><div class="heat xp-heat" style="--cols:${C.length};min-width:${130 + C.length * 72}px">
+          <div></div>${C.map(ck => `<div class="heat-h">${hEsc(label(heat.cols, ck))}</div>`).join('')}
+          ${R.map(rk => `<div class="heat-r">${hEsc(label(heat.rows, rk))}</div>${C.map(ck => cellHtml(rk, ck)).join('')}`).join('')}
+        </div></div>
+        <div class="heat-legend">${legend}<span class="plain">faded: fewer than ${minP} promises · click a cell to see its accounts</span></div>`
+      : '<div class="empty-note">No accounts match these filters.</div>';
+    panel('xpHeat', `${m.label} by ${DIM_LABEL[heat.rows].toLowerCase()} and ${DIM_LABEL[heat.cols].toLowerCase()}`,
+      `${hEsc(periodText())}${scopeText() ? `, ${hEsc(scopeText())}` : ''}. Each cell is coloured against this view's overall figure.`,
+      ask(`Where is the ${m.label.toLowerCase()} worst by ${DIM_LABEL[heat.rows].toLowerCase()} and ${DIM_LABEL[heat.cols].toLowerCase()}, and what should we do about it`, 'agent'),
+      `<div class="xs-ctl xh-ctl">
+         <label>Rows <select id="xhRows">${opts(heat.rows, heat.cols)}</select></label>
+         <label>Columns <select id="xhCols">${opts(heat.cols, heat.rows)}</select></label>
+         <label>Measure <select id="xhMeasure">${Object.entries(HEAT_MEASURES).map(([k, v]) => `<option value="${k}"${k === heat.measure ? ' selected' : ''}>${hEsc(v.label)}</option>`).join('')}</select></label>
+       </div>` + body);
+    const el = document.getElementById('xpHeat');
+    el.querySelector('#xhRows').addEventListener('change', e => { heat.rows = e.target.value; rememberHeat(); loadHeat(); });
+    el.querySelector('#xhCols').addEventListener('change', e => { heat.cols = e.target.value; rememberHeat(); loadHeat(); });
+    el.querySelector('#xhMeasure').addEventListener('change', e => { heat.measure = e.target.value; rememberHeat(); renderHeat(); });
   }
 
   // ---- Layer 2: account records
   const SORTS = {
-    overdue: ['Overdue balance', r => -num(r.Overdue_Balance) || -num(r.Outstanding_Balance) / 1e6],
-    balance: ['Balance', r => -num(r.Outstanding_Balance)],
+    // An account's overdue balance is its balance when it is past due and $0 when current, so this
+    // sort is "overdue accounts first, largest balance first"; the next ranks everyone by balance.
+    overdue: ['Overdue first, largest balance', r => -num(r.Overdue_Balance) || -num(r.Outstanding_Balance) / 1e6],
+    balance: ['Largest balance, all accounts', r => -num(r.Outstanding_Balance)],
     dpd: ['Days overdue', r => -num(r.Days_Past_Due)],
     promise: ['Promised', r => -(num(r.PTP_Amount) || 0)],
     credit: ['Credit score (lowest first)', r => num(r.Credit_Score)],

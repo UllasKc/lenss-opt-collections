@@ -13,7 +13,7 @@ export const GUIDE: GuideSection[] = [
     id: 'about', title: 'What LensS is',
     keywords: ['lenss', 'lens', 'concentrix', 'optus', 'what is', 'who built', 'who made', 'platform', 'about', 'purpose', 'what are you', 'who are you', 'what can you do'],
     text: `**LensS** is Concentrix's decision-intelligence platform, built by the **Concentrix Data & Analytics Practice**. It turns governed business data into answers people can act on, with every figure traceable to its source.
-**LensS Collections Intelligence for Optus** is LensS applied to Optus's telecom collections: promises to pay and why they break, the contact centre (first contact resolution, transfers, repeat calls, handle time), where the overdue balance sits, and the customer scenarios in Optus's Scenario_Guide. LensS is a Concentrix product, set up for Optus with Optus's demo data.
+**LensS Collections Intelligence for Optus** is LensS applied to Optus's telecom collections: promises to pay and why they break, the contact centre (first contact resolution, transfers, repeat calls, handle time), where the overdue balance sits, and the customer scenarios in Optus's Scenario Guide. LensS is a Concentrix product, set up for Optus with Optus's demo data.
 It has four tabs: **Command Center** (how collections are doing, in about a minute), **Explorer** (why, with filters and drill-downs), **Assistant** (ask questions in plain language) and **Observability** (how every answer was made, its quality, cost and safety).
 The answers come from the **LensS Intelligence Engine**, which turns a question into SQL over certified, governed views of the collections data, runs it and explains the result. Every figure on the dashboards comes from those same views; no AI computes them.`,
   },
@@ -26,7 +26,7 @@ The answers come from the **LensS Intelligence Engine**, which turns a question 
 - **2 · Why promises break:** a card per factor that makes a clear difference (call outcome, credit score, missed payments…), with the broken rate of each segment against the overall rate, and the factors that make little difference (product, state, porting, renewal window, new product interest) grouped together.
 - **3 · Contact centre:** FCR, transfers, repeat calls and average handle time (latest month, last month and 12 months), then Scenario 4 (promises broken by call outcome), Scenario 5 (transfers and handle time by state) and Scenario 6 (repeat calls after an unresolved call).
 - **4 · Where the money is:** the overdue balance by days-past-due bucket, and a 12-month trend chart (switch between overdue balance, broken rate, amount promised, FCR, transfers and repeat calls).
-- **5 · Scenarios:** a card for each of the six scenarios in Optus's Scenario_Guide, and the broken promises with the most at stake.
+- **5 · Scenarios:** a card for each of the six scenarios in Optus's Scenario Guide, and the broken promises with the most at stake.
 - **View accounts** (or **View**) on any figure opens the accounts behind it, with **Export CSV**. **KPI definitions** (in the banner and at the bottom) explain every figure.
 Every panel has an **Ask LensS** button; hover over it to see the exact question it will ask.`,
   },

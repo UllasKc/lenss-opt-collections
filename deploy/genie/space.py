@@ -31,7 +31,7 @@ INSTRUCTIONS_TEXT = """OPTUS COLLECTIONS ANALYTICS (LensS, powered by Concentrix
 
 Scope: Optus telecom collections: overdue accounts and balances, promises to pay (PTP) and why
 they break, the contact centre (first contact resolution, transfers, repeat calls, handle time)
-and the six scenarios of Optus's Scenario_Guide. Products: Postpaid Mobile, NBN, Prepaid,
+and the six scenarios of Optus's Scenario Guide. Products: Postpaid Mobile, NBN, Prepaid,
 5G Home Internet, SMB. States and territories: NSW, VIC, QLD, WA, SA, TAS, ACT, NT.
 
 CURRENCY, SPELLING AND FORMAT
@@ -71,7 +71,7 @@ CALCULATION RULES
   least {{pts:driver_spread_pts}} apart (Factor_Strength in qry_ptp_break_drivers); otherwise say it
   makes little difference. Say so plainly: it is a finding, not a gap in the data.
 
-SCENARIOS (Optus's Scenario_Guide; thresholds from business_rules_config)
+SCENARIOS (Optus's Scenario Guide; thresholds from business_rules_config)
 1. Upgrade-but-Overdue: New_Product_Interest_Flag = 1 AND Days_Past_Due > {{rule:s1_min_dpd}} (Scenario_1_Flag).
 2. High-Risk Porting Out: Porting_Status = 'Outbound' AND Credit_Score < {{rule:s2_credit_below}} (Scenario_2_Flag).
 3. Churn Risk at Renewal: Missed_Payments_L12M >= {{rule:s3_min_missed_payments}} AND Contract_Renewal_Window_Flag = 1 (Scenario_3_Flag).
@@ -151,7 +151,7 @@ def examples(g: str):
          f"SELECT CASE WHEN FCR_Flag = 1 THEN 'Resolved first time (FCR)' ELSE 'Not resolved first time' END AS Call, COUNT(*) AS Contacts, SUM(PTP_Flag) AS Promises, 1.0*SUM(PTP_Flag)/COUNT(*) AS Promise_Rate FROM {g}.qry_account_month WHERE Contacted_Flag = 1 GROUP BY 1;"),
         ("What is the total call-handle-time cost (seconds) for accounts that ultimately broke their PTP?",
          f"SELECT SUM(Handle_Time_Seconds) AS Handle_Seconds, SUM(Handle_Time_Seconds)/3600.0 AS Handle_Hours, COUNT(*) AS Broken_Promises_With_A_Call FROM {g}.qry_account_month WHERE Broken_PTP_Flag = 1 AND Contacted_Flag = 1;"),
-        # Scenario_Guide filters and the workbook's first sample questions (v1).
+        # Scenario Guide filters and the workbook's first sample questions (v1).
         ("What is the monthly broken-PTP rate trend?",
          f"SELECT Snapshot_Date, Promises, Broken_Promises, Broken_Rate, Broken_Amount FROM {g}.qry_monthly_trend ORDER BY Snapshot_Date;"),
         ("Show accounts with New_Product_Interest = Y and overdue, by state",

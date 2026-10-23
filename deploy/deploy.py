@@ -474,7 +474,7 @@ def step_genie(db: Databricks, sql: Sql, cfg: dict, state: dict, cfg_path: Path)
     body = {
         "serialized_space": serialized,
         "title": title,
-        "description": "Optus collections: promises to pay, why they break, the contact centre (FCR, transfers, repeats) and the Scenario_Guide scenarios (LensS, powered by Concentrix).",
+        "description": "Optus collections: promises to pay, why they break, the contact centre (FCR, transfers, repeats) and the Scenario Guide scenarios (LensS, powered by Concentrix).",
         "warehouse_id": state["warehouse_id"],
     }
     if space_id:

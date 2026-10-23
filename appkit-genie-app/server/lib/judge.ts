@@ -46,6 +46,7 @@ export function extractClaims(text: string): Claim[] {
     .replace(/(?<![\w.])(1-30|31-60|61-90|91\+|550-649|650-749|750\+|7-10|11-14|15\+|7-14|7 to 14)(?!\d)/g, ' ')    // band names: days past due, credit score, lead time, the repeat window
     .replace(/\b\d{1,2}(:\d{2})?\s*(-|–|to)\s*\d{1,2}(:\d{2})?\s*(am|pm)\b/gi, ' ') // contact-time windows
     .replace(/\b\d{4}-\d{2}-\d{2}\b/g, ' ')                               // dates
+    .replace(/\b[A-Za-z]{2,}[-_]\d+\b/g, ' ')                              // identifiers: account IDs like OPT-10000001
     // Ranges carry their unit on the last figure only: "0.15-0.54%", "$2–3M", "20 to 25%".
     .replace(/([₹$])?(\d[\d,]*(?:\.\d+)?)\s*(?:-|–|to)\s*([₹$])?(\d[\d,]*(?:\.\d+)?)\s?(%|k\b|m\b|mn\b|b\b|bn\b|cr\b|l\b)/gi,
       (_m, c1, a, c2, b, u) => `${c1 ?? c2 ?? ''}${a}${u} to ${c2 ?? c1 ?? ''}${b}${u}`);

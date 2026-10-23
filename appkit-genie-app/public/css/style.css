@@ -583,7 +583,18 @@ body{background:linear-gradient(180deg,#F3F6FA 0,#F6F7F9 320px)}
 .heat-legend span{display:inline-flex;align-items:center;gap:6px;background:none}
 .heat-legend span::before{content:"";width:12px;height:12px;border-radius:3px}
 .heat-legend .t-bad::before{background:#EF4444}.heat-legend .t-warn::before{background:#F59E0B}.heat-legend .t-good::before{background:#10B981}
-@media(max-width:700px){.heat{grid-template-columns:90px repeat(5,minmax(44px,1fr))!important}.heat-c small{display:none}}
+/* Explorer heatmap: any number of columns (--cols); a cell is a button that opens its accounts */
+.xp-heat{grid-template-columns:130px repeat(var(--cols,5),minmax(64px,1fr))}
+button.heat-c{border:0;cursor:pointer;transition:transform .12s,box-shadow .12s}
+button.heat-c:hover{transform:translateY(-1px);box-shadow:0 0 0 2px var(--ink,#0F172A) inset}
+.heat-c.few{opacity:.45}
+.heat-c.empty{background:var(--line,#E2E8F0);color:var(--muted);cursor:default}
+.heat-legend .t-brand::before{background:#3FB6D9}
+.heat-legend .plain::before{display:none}
+.xh-ctl{margin-bottom:12px;flex-wrap:wrap}
+.xp-chart{height:280px;position:relative}
+.xp-chart.short{height:200px;margin-bottom:12px}
+@media(max-width:700px){.heat{grid-template-columns:90px repeat(5,minmax(44px,1fr))!important}.xp-heat{grid-template-columns:80px repeat(var(--cols,5),minmax(40px,1fr))!important}.heat-c small{display:none}}
 
 /* funnel */
 .funnel{display:flex;flex-direction:column;gap:9px}

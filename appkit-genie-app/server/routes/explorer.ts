@@ -36,8 +36,10 @@ const MEASURES = `
   SUM(Overdue_Balance)/COUNT(DISTINCT Snapshot_Date) AS overdue_balance,
   SUM(Outstanding_Balance)/COUNT(DISTINCT Snapshot_Date) AS total_balance,
   SUM(PTP_Flag) AS promises,
+  1.0*SUM(PTP_Flag)/NULLIF(COUNT(*),0) AS promise_rate,
   SUM(Broken_PTP_Flag) AS broken,
   SUM(Kept_PTP_Flag) AS kept,
+  1.0*SUM(Kept_PTP_Flag)/NULLIF(SUM(PTP_Flag),0) AS kept_rate,
   1.0*SUM(Broken_PTP_Flag)/NULLIF(SUM(PTP_Flag),0) AS broken_rate,
   SUM(PTP_Amount) AS promised_amount,
   SUM(Broken_PTP_Amount) AS broken_amount,
@@ -185,6 +187,25 @@ export function buildExplorerRouter(db: Lakebase): express.Router {
         };
       });
       res.json(value);
+    } catch (err) { fail(res, err); }
+  });
+
+  /**
+   * Two dimensions at once (the Explorer's heatmap): every measure for each rows × cols pair, with
+   * the current filters. Both dimensions are keys of DIMS, so nothing user-typed reaches the SQL.
+   */
+  router.get('/api/explorer/grid', async (req, res) => {
+    try {
+      const rows = String(req.query.rows ?? 'product'), cols = String(req.query.cols ?? 'bucket');
+      if (!DIMS[rows] || !DIMS[cols] || rows === cols) {
+        throw Object.assign(new Error('Unknown or repeated dimension'), { status: 400 });
+      }
+      const { where, applied } = await filtersFrom(req.query);
+      const r = DIMS[rows], c = DIMS[cols];
+      const value = await cached('grid:' + JSON.stringify({ applied, rows, cols }), () => runSql(`
+        SELECT ${r.col()} AS r, ${r.order ?? 'NULL'} AS r_ord, ${c.col()} AS c, ${c.order ?? 'NULL'} AS c_ord, ${MEASURES}
+        FROM ${BASE} ${where} GROUP BY ${r.col()}, ${c.col()}`));
+      res.json({ rows, cols, applied, cells: value });
     } catch (err) { fail(res, err); }
   });
 

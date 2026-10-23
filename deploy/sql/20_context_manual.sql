@@ -1,5 +1,5 @@
 -- Governance content that is not in the workbook: how SQL must be written, what the data can't
--- answer, and the demo order. The workbook's own Data_Dictionary, Scenario_Guide and
+-- answer, and the demo order. The workbook's own Data_Dictionary, Scenario Guide and
 -- Sample_BI_Questions land in the context schema at ingest.
 CREATE OR REPLACE TABLE {{catalog}}.{{prefix}}_context.sql_generation_controls (
   control_id INT, control_text STRING

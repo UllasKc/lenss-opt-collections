@@ -1,15 +1,15 @@
 -- Business thresholds as data, not hardcoded logic. Every certified and Command Center view reads
 -- them through gold.qry_rules, so changing a value here and re-running the deploy's transform and
 -- views steps moves every figure. The three scenario thresholds come from the workbook's
--- Scenario_Guide; the others are this app's own choices, each explained in its notes.
+-- Scenario Guide; the others are this app's own choices, each explained in its notes.
 CREATE OR REPLACE TABLE {{catalog}}.{{prefix}}_gold.business_rules_config (
   rule_name STRING COMMENT 'Name used by gold.qry_rules and the views',
   threshold_value DOUBLE COMMENT 'The value in force (NULL = not set)',
   notes STRING COMMENT 'What the rule means, where it comes from and which views use it'
-) COMMENT 'Every business threshold the gold views use, with its meaning and source (the Scenario_Guide for the three scenario rules). Views read these values through gold.qry_rules; quote this table when asked how a figure is defined (for example what counts as a low credit score).';
+) COMMENT 'Every business threshold the gold views use, with its meaning and source (the Scenario Guide for the three scenario rules). Views read these values through gold.qry_rules; quote this table when asked how a figure is defined (for example what counts as a low credit score).';
 
 INSERT INTO {{catalog}}.{{prefix}}_gold.business_rules_config VALUES
--- Scenario_Guide (the workbook)
+-- Scenario Guide (the workbook)
 ('s1_min_dpd', 30, 'Scenario 1, Upgrade-but-Overdue: New_Product_Interest_Flag = Y and Days_Past_Due greater than this. Used by qry_account_month (Scenario_1_Flag), qry_scenario_summary and qry_scenario_accounts.'),
 ('s2_credit_below', 550, 'Scenario 2, High-Risk Porting Out: Porting_Status = Outbound and Credit_Score below this. Also the top of the lowest credit band.'),
 ('s3_min_missed_payments', 2, 'Scenario 3, Churn Risk at Renewal: Missed_Payments_L12M at least this and Contract_Renewal_Window_Flag = Y.'),

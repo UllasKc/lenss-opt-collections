@@ -4,8 +4,8 @@ Decision intelligence for Optus's telecom collections, built on Databricks by th
 
 | Tab | What it does |
 |---|---|
-| **Command Center** | An executive summary ("the month in 30 seconds"), then one story in five chapters: where promises to pay stand this month, why they break, how the contact centre is doing and what it does to promises, where the money is, and which customers need a different conversation (the six scenarios of Optus's Scenario_Guide). Every figure opens the accounts behind it |
-| **Explorer** | Self-service drill-down by month, product, state, credit score, days past due, missed payments, call outcome, porting, renewal window and new product interest, with the accounts behind each item and CSV export |
+| **Command Center** | An executive summary ("the month in 30 seconds"), then one story in five chapters: where promises to pay stand this month, why they break, how the contact centre is doing and what it does to promises, where the money is, and which customers need a different conversation (the six scenarios of Optus's Scenario Guide). Every figure opens the accounts behind it |
+| **Explorer** | Self-service drill-down by month, product, state, credit score, days past due, missed payments, call outcome, porting, renewal window and new product interest, with the accounts behind each item and CSV export. A heatmap of any two dimensions (product by arrears stage by default; broken, kept or promise rate, FCR, transfers, repeats or overdue balance), charts of promised money kept against broken and of call outcomes, and a 12-month trend chart |
 | **Assistant** | Plain-language questions answered by a Genie space ("LensS query engine"): Quick answer, Deep analysis or Auto, with a conversation-aware router (data or platform guide, quick or deep, escalation to a deep analysis when an answer is not enough or a question is asked again), conversation memory, charts, SQL and a quality score |
 | **Observability** | Pipeline traces, answer quality and faithfulness, performance, drift, security and guardrails, Evaluations, Responsible AI and Databricks cost |
 
@@ -235,7 +235,7 @@ Paste the summary at the end of each log (or the whole log) back for review.
 ## Business rules and view descriptions
 
 - **Every threshold is a row in `gold.business_rules_config`** (`deploy/sql/40_gold_config.sql`):
-  - the three Scenario_Guide thresholds: more than 30 days past due; credit score below 550; 2+ missed payments;
+  - the three Scenario Guide thresholds: more than 30 days past due; credit score below 550; 2+ missed payments;
   - the bands for days past due, credit score, missed payments and promise lead time;
   - the 30-promise minimum before a segment is ranked;
   - the 10-point spread for a factor to "make a clear difference";
@@ -247,7 +247,7 @@ Paste the summary at the end of each log (or the whole log) back for review.
   - **The metric view** can't read a table at query time, so the deploy writes the value in (`{{rule:<rule>}}`, `{{rule:<rule>+1}}` for a band's next value) and stops if a rule has no value.
   - **The Genie instructions** quote thresholds through `{{rule:}}`, `{{pct:}}` and `{{pts:}}`, filled from the table at each `genie` step.
   - **To change a threshold:** edit its row in `40_gold_config.sql`, then run `--only transform,views,summary,genie`.
-- **Every gold view has a description** (`COMMENT ON TABLE` / `COLUMN`, next to the view in `deploy/sql/60_certified_views.sql` and `70_command_center_views.sql`): the business question it answers (from Optus's Sample_BI_Questions and Scenario_Guide), its grain, its rules, and when to prefer it over a similar view. Edit descriptions and the Genie space in the repo, not the UI: every deploy re-creates them.
+- **Every gold view has a description** (`COMMENT ON TABLE` / `COLUMN`, next to the view in `deploy/sql/60_certified_views.sql` and `70_command_center_views.sql`): the business question it answers (from Optus's Sample_BI_Questions and Scenario Guide), its grain, its rules, and when to prefer it over a similar view. Edit descriptions and the Genie space in the repo, not the UI: every deploy re-creates them.
 - **The app's account lists use the same rules:** each list behind a Command Center card reads the same view and columns as the card's number (`server/routes/dashboard.ts`).
 
 ## Known limits and future work
