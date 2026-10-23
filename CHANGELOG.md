@@ -8,6 +8,9 @@ Versions match git tags where one exists.
 
 ## Unreleased
 
+### Optus logo (2026-10-23, at the user's request)
+- The Optus logo (supplied by the user, cropped to `public/img/optus-logo.png`) replaces the "FOR OPTUS" text tag in the header ("for [logo]"). It also appears as a "Prepared for [logo]" chip at the top of the Command Center hero, and in the footer. It sits on a white chip so it reads the same in light and dark mode. The page title still says "for Optus". This reverses the v1.0.0 choice of no Optus logo; it is still LensS, powered by Concentrix, presented for Optus, not by Optus.
+
 ### Explorer: two dimensions at once, more charts (deployed to personal and checked, 2026-10-23)
 - **Heatmap: product by arrears stage, or any pair.** A new panel under the slicer shows one measure for each product × days-past-due cell, coloured against the view's own overall figure (red: worse by 5+ percentage points; blue: within 5; green: better by 5+). Cells with fewer than 30 promises are faded. You can pick the rows, the columns (any two filters, month included) and the measure: broken-promise rate (the default), kept-promise rate, promise rate (promises ÷ account-months), FCR, transferred, called again, or overdue balance (shaded by size). Click a cell to see its accounts. The current filters apply. New endpoint: `GET /api/explorer/grid?rows=&cols=` (both must be known dimensions); new measures `promise_rate` and `kept_rate`.
 - **The call-outcome chart uses contacted customers as its base,** like the FCR tile. It showed shares of all account-months, so with about 82% not contacted, "resolved first time" read as about 12% by product against 67% overall. Each bar is now resolved first time, transferred and left unresolved (adding up to 100%), and the label gives the share contacted.

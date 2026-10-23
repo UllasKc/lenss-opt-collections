@@ -1,6 +1,6 @@
 # LensS Collections Intelligence for Optus
 
-Decision intelligence for Optus's telecom collections, built on Databricks by the Concentrix Data & Analytics Practice and presented as **Concentrix LensS**. It is LensS, powered by Concentrix, set up for Optus with Optus's demo data. Governed bronze → silver → gold data feeds a web app with four tabs:
+Decision intelligence for Optus's telecom collections, built on Databricks by the Concentrix Data & Analytics Practice and presented as **Concentrix LensS**. It is LensS, powered by Concentrix, set up for Optus with Optus's demo data; the Optus logo marks it as prepared for Optus (header, Command Center, footer). Governed bronze → silver → gold data feeds a web app with four tabs:
 
 | Tab | What it does |
 |---|---|
