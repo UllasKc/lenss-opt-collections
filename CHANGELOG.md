@@ -8,6 +8,10 @@ Versions match git tags where one exists.
 
 ## Unreleased
 
+- **Every test ends with a summary that stands on its own,** so pasting the end of the output is enough to diagnose. Each starts with the app, date and options, and gives the counts:
+  - **Smoke test:** a `=== SUMMARY ===` with every failure in full.
+  - **Org smoke test:** every FAIL and WARN with up to 500 characters of detail (was 220). The deploy step then repeats the nine workspace checks (P1–P9) with the detail of any that didn't pass.
+  - **Org routing test:** every FAIL and every WARN probe (what it routed to and what was expected), every end-to-end check, and the conversation result. Previously the summary listed failures only.
 - **Fix: one database error stopped the whole app.**
   - **What happened on personal:** the shared Lakebase endpoint was disabled ("The endpoint has been disabled"). `GET /api/chat/sessions` awaited it with no try/catch. Express 4 doesn't catch a rejected async handler, so the rejection went unhandled and Node stopped the server. The Assistant then showed "Sorry, that question couldn't be answered".
   - **The fix:** every router is wrapped (`server/lib/asyncRoutes.ts`, `catchAsync`), so an async error reaches one error handler. It answers 503 "a data service is unavailable" for Lakebase or warehouse outages and 500 otherwise, and closes a stream already under way. A failure in background work is logged, never fatal (`unhandledRejection`).

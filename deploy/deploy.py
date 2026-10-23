@@ -1192,6 +1192,7 @@ def step_org_smoke(db: Databricks, sql: Sql, cfg: dict, state: dict, cfg_path: P
     c, p, name = cfg["catalog"], cfg["schema_prefix"], cfg["app_name"]
     gold = f"{c}.{p}_gold"
     results: list[tuple[str, str, str]] = []
+    details: dict[str, str] = {}
 
     def pc(cid: str, title: str, fn) -> None:
         try:
@@ -1201,6 +1202,7 @@ def step_org_smoke(db: Databricks, sql: Sql, cfg: dict, state: dict, cfg_path: P
         except Exception as e:  # noqa: BLE001 - report every failure, keep going
             status, detail = ("WARN", str(e)[7:]) if str(e).startswith("[warn] ") else ("FAIL", f"{type(e).__name__}: {e}"[:400])
         results.append((cid, status, title))
+        details[cid] = str(detail)[:400]
         print(f"{status:<4} [{cid}] {title}\n       {detail}", flush=True)
 
     def warn(msg: str) -> Exception:
@@ -1331,6 +1333,11 @@ def step_org_smoke(db: Databricks, sql: Sql, cfg: dict, state: dict, cfg_path: P
         run_app_test("org_smoke_test.py", "org smoke test", state, db, test_args)
     except DeployError as e:
         app_failed = e
+    # Repeated last, after the app checks' summary, so one paste of the end holds both.
+    print("\n=== WORKSPACE CHECKS SUMMARY (P1-P9, as the person deploying) ===", flush=True)
+    for cid, status, title in results:
+        print(f"  {status:<4} [{cid}] {title}" + (f": {details[cid]}" if status != "PASS" else ""), flush=True)
+    print(f"  {sum(r[1] == 'PASS' for r in results)} passed, {sum(r[1] == 'WARN' for r in results)} warnings, {len(failed)} failed", flush=True)
     if failed or app_failed:
         raise DeployError(f"Org smoke test: {len(failed)} workspace check(s) failed"
                           + (f" ({', '.join(r[0] for r in failed)})" if failed else "") + ("; app checks failed (see above)" if app_failed else ""))

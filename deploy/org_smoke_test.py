@@ -901,7 +901,8 @@ def main():
         requests.delete(f"{base}/api/chat/sessions/{sid}", headers=H, timeout=30)
 
     counts = {k: sum(1 for r in results if r[2] == k) for k in ("PASS", "WARN", "FAIL", "SKIP")}
-    out("\n=== SUMMARY ===")
+    out(f"\n=== SUMMARY (org smoke test, {base}, {datetime.now():%Y-%m-%d %H:%M}, sections {','.join(sorted(run))}"
+        f"{', skip-slow' if args.skip_slow else ''}) ===")
     for sec_ in SECTIONS:
         rs = [r for r in results if r[0] == sec_]
         if rs:
@@ -910,7 +911,7 @@ def main():
     for status in ("FAIL", "WARN"):
         for r in results:
             if r[2] == status:
-                out(f"  {status} [{r[1]}] {r[3]}: {r[4][:220]}")
+                out(f"  {status} [{r[1]}] {r[3]}: {r[4][:500]}")
     out(f"\n{counts['PASS']} passed, {counts['WARN']} warnings, {counts['FAIL']} failed, {counts['SKIP']} skipped "
         f"in {sum(r[5] for r in results) / 60:.0f} min")
     out(f"Full log: {log_path}")

@@ -182,6 +182,9 @@ def main():
     made = []
     totals = {"PASS": 0, "WARN": 0, "FAIL": 0, "INFO": 0, "SKIP": 0}
     problems = []
+    warnings = []       # the router model's judgement went the other way (soft expectations)
+    e2e_results = []    # every end-to-end check, for the summary
+    conv_result = ""
 
     out("=== ORG ROUTING TEST (LensS Collections for Optus) ===")
     out(f"app {base} · contexts {','.join(contexts)}{' · matrix only' if args.matrix_only else ''}{' · skip-slow' if args.skip_slow else ''}"
@@ -275,7 +278,9 @@ def main():
                     out(f"    {status} {kind:<10} {setting:<5} {q[:60]!r} → {desc}"
                         + (f"\n           {'; '.join(firm_bad or soft_bad)}" if firm_bad or soft_bad else ""))
                     if status == "FAIL":
-                        problems.append(f"{c} {kind} {setting}: {'; '.join(firm_bad)}")
+                        problems.append(f"{c} {kind} {setting}: {q[:50]!r} → {desc}; {'; '.join(firm_bad)}")
+                    elif status == "WARN":
+                        warnings.append(f"{c} {kind} {setting}: {q[:50]!r} → {desc}; {'; '.join(soft_bad)}")
             grid.append(f"    {kind:<10} " + "  ".join(f"{s[:5]:<5}{x}" for s, x in zip(SETTINGS, cells)))
         out("    grid (✓ pass, ✗ fail, ~ warn, · info):")
         for g in grid:
@@ -293,8 +298,9 @@ def main():
             except Exception as e:  # noqa: BLE001
                 status, detail = ("SKIP", str(e)[6:]) if str(e).startswith("[skip]") else ("FAIL", f"{type(e).__name__}: {e}")
             totals[status] += 1
+            e2e_results.append(f"{status} {name}: {str(detail)[:250]}")
             if status == "FAIL":
-                problems.append(f"e2e {name}: {detail}"[:200])
+                problems.append(f"e2e {name}: {detail}"[:300])
             out(f"{status:<4} {name} ({time.time() - t0:.0f}s)\n       {str(detail)[:400]}")
 
         def need(a, cond, msg):
@@ -364,15 +370,28 @@ def main():
             totals["PASS"] += len(rows) - failures
             totals["FAIL"] += failures
             problems += [f"conversation turn {r[0]}: {r[2]!r}" for r in rows if r[1] == "FAIL"]
-            out(f"  {len(rows) - failures}/{len(rows)} conversation turns routed as expected")
+            conv_result = f"{len(rows) - failures}/{len(rows)} conversation turns routed as expected"
+            out("  " + conv_result)
 
     for sid in made:
         requests.delete(f"{base}/api/chat/sessions/{sid}", headers=H, timeout=30)
 
-    out("\n=== SUMMARY ===")
-    out("  " + ", ".join(f"{k} {v}" for k, v in totals.items() if v))
+    # The summary, last, so it can be pasted on its own: counts, every failure and warning in full,
+    # the end-to-end checks and the conversations.
+    out(f"\n=== SUMMARY (org routing test, {base}, {datetime.now():%Y-%m-%d %H:%M}, contexts {','.join(contexts)}"
+        f"{', matrix only' if args.matrix_only else ''}{', skip-slow' if args.skip_slow else ''}) ===")
+    out("  " + ", ".join(f"{k} {v}" for k, v in totals.items() if v)
+        + "   (FAIL = a firm routing rule broken; WARN = the router model's judgement differed; INFO = no single right answer)")
     for pr in problems:
         out(f"  FAIL {pr}")
+    for w in warnings:
+        out(f"  WARN {w}")
+    if e2e_results:
+        out("  End to end:")
+        for r in e2e_results:
+            out(f"    {r}")
+    if conv_result:
+        out(f"  Conversations: {conv_result}")
     out(f"Full log: {log_path}")
     log_file.close()
     sys.exit(1 if totals["FAIL"] else 0)

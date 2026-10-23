@@ -380,7 +380,12 @@ def main():
     print()
     for name, status, detail in results:
         print(f"{status}  {name}\n      {detail}")
-    print(f"\n{len(results) - failures}/{len(results)} checks passed")
+    # The summary, last, so it can be pasted on its own: the counts and every failure in full.
+    print(f"\n=== SUMMARY (smoke test, {args.app_url}, {time.strftime('%Y-%m-%d %H:%M')}) ===")
+    for name, status, detail in results:
+        if status == "FAIL":
+            print(f"  FAIL {name}: {detail}")
+    print(f"{len(results) - failures}/{len(results)} checks passed")
     sys.exit(1 if failures else 0)
 
 
