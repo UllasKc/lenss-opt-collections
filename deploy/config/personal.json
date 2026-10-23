@@ -1,0 +1,26 @@
+{
+  "profile": "personal",
+  "catalog": "cnx_automl_dev",
+  "create_catalog": true,
+  "schema_prefix": "optus_collections",
+  "warehouse_id": "4d0f882007ebceb6",
+  "genie_space_title": "LensS Optus Collections Analytics",
+  "lakebase_project": "lenss-collections-app",
+  "lakebase_database": "chatapp-optus",
+  "app_name": "lenss-optus-collections",
+  "readers_group": "lenss-users",
+  "prewarm_suggestions": false,
+  "semantic_cache": { "threshold": 98, "embedding_model": "databricks-gte-large-en" },
+  "guardrails": {
+    "model": "databricks-meta-llama-3-1-8b-instruct",
+    "input": { "pii": "redact", "profanity": "block", "prompt_injection": "block", "off_topic": "warn" },
+    "output": { "pii": "redact", "profanity": "redact", "policy_checks": "flag" }
+  },
+  "faithfulness_judge": { "model": "databricks-gpt-oss-20b", "sample_percent": 100, "warn_below": 70 },
+  "follow_ups": { "model": "databricks-meta-llama-3-1-8b-instruct" },
+  "auto_mode": { "method": "ai", "model": "databricks-meta-llama-3-3-70b-instruct", "timeout_ms": 8000 },
+  "platform_help": { "enabled": true, "method": "ai" },
+  "conversation_memory": { "enabled": true, "compact_every": 5 },
+  "evals": { "max_accuracy_cases": 1 },
+  "idle_stop_minutes": 15
+}

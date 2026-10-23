@@ -1,0 +1,137 @@
+# Changelog and development log
+
+Everything that has changed in LensS Collections Intelligence for Optus, newest first, with the reasons and what was verified. For how things work, see `README.md`.
+
+Versions match git tags where one exists.
+
+---
+
+## Unreleased
+
+- **Optus diagrams** (`docs/`, PNG and SVG), adapted from the LensS Collections set. Every fact comes from the Optus build: Optus's data and views, 16 business rules, 29 Genie examples and Optus's 12 sample questions as benchmarks, the `chatapp-optus` database, no targets or outbound.
+  - `LensS_Optus_How_It_Works`: the four steps for a non-technical audience.
+  - `LensS_Optus_Architecture`: the technical view, including the medallion pipeline and the 11-step deploy.
+  - `LensS_Optus_Agentic_Architecture`: the governed agentic view. Engines not built yet are dashed "ready to add" (more Genie agents, document knowledge, MCP tools, Teams/API channels).
+  - Branding: LensS, powered by Concentrix, with a "FOR OPTUS" tag and a yellow rule under the title. No Optus logo.
+  - The scripts that draw them are in `docs/diagrams/`. Each was rendered and checked for overlaps.
+- **Ported from LensS Collections v1.12.1–v1.12.5,** each checked against the Optus code first:
+  - **Folder sharing (v1.12.1, 6481ee3):** the source-folder share now covers everyone who may start the app. Start re-runs the deployment as the person pressing it, and in org, sharing with the app's service principal alone wasn't enough. Now shared: the service principal, every direct CAN_MANAGE holder on the app (not "admins"), and config `app_starters` (a name with "@" is a user, otherwise a group).
+  - **One at a time (v1.12.2, 8acfd4a):** principals are shared one at a time, so a rejected one (for example a CAN_MANAGE user not in the workspace) doesn't block the rest. Each failure is logged with Databricks' reason, then a "readable by N of M" line.
+  - **Demo givers (v1.12.3, ef74a16):** a new config `demo_givers_group` gets CAN_MANAGE on the app before the sync, so the folder sharing includes it. A wrong name only warns. The model: readers = Consumer access + CAN_USE; demo givers = Workspace access only + CAN_MANAGE + folder read. Not set in the Optus configs yet: waiting for the group names.
+  - **Cost card (v1.12.4, 6459fdf):** when cost figures aren't available, the cost tab shows a "Coming soon: Databricks cost is a work in progress" card instead of the metastore-grant instructions. The technical reason goes to the browser console.
+  - **Not applicable (v1.12.5, bbfb1c0):** the collector-row grid fix. Optus has no collector rows, and no grid here holds a View button.
+  - **Verified:** `deploy.py` parses, the call order is right (demo givers before the sync, folder sharing after) and cost.js parses. **Not yet deployed:** the personal workspace's only warehouse (Serverless Starter, 2X-Small) still refuses to start with "Cannot create the resource, please try again later".
+- **Ported from LensS Collections v1.12.0 (fd9deb9),** each checked against the Optus code first:
+  - **Deploy guard (`check_page_scripts`):** the app step now stops before changing anything if two page scripts declare the same top-level name, the bug that stopped Observability loading here. The Optus scripts pass; a planted `dayLabel` / `renderCost` duplicate is caught.
+  - **Router:** a vague follow-up ("Tell me more", "Can you explain that?") after a data answer stays at the chosen depth instead of becoming a fresh deep analysis. Two routing eval cases in Optus wording (42 in all).
+  - **Responsible AI** lists only the assistant's data sources, leaving out the app's internals (`qry_rules`, `qry_platform_cost`).
+  - **Privacy:** a real email in a code comment is replaced with `jane.doe@example.com`.
+  - Already in Optus: the Genie threshold tokens. Not applicable: `qry_cc_actions`, which Optus doesn't have.
+  - **Verified:** type-check, the guard on the real scripts and on a planted duplicate. **Not yet deployed:** the personal workspace couldn't start its SQL warehouse ("Cannot create the resource, please try again later"), so `--only lakebase,app` is still to run.
+- **Others can start the app after idle stop.** Starting a stopped app re-runs its last deployment, which downloads the code from the folder the deploy synced to, in the deployer's home. For anyone else with CAN_MANAGE, Start failed with "Error downloading source code … no files found". The app step now gives the app's service principal CAN_READ on that folder (`grant_source_read`, right after the sync; a failure only warns). Ported from LensS Collections. Verified on personal: the folder's permissions now show the service principal with CAN_READ.
+
+## v1.0.0 (deployed to personal, 16 Oct 2026)
+
+LensS Collections for Optus: the LensS Collections product (v1.11.0, commit `09ff2c1`), rebuilt around Optus's telecom collections data. It is LensS, powered by Concentrix, for Optus: no Optus logo, and the Concentrix Data & Analytics Practice credit is kept.
+
+### Data
+- **Optus's v2 workbook** (`Data/Optus_GenBI_Collections_Demo_Data_v2.xlsx`). It replaces v1, which had no interaction data. Profiled first:
+  - 15,000 accounts × 12 monthly snapshots (1 Nov 2025 to 1 Oct 2026), 180,000 rows, no duplicates;
+  - the rules the data dictionary states hold: a transferred call is never FCR, and every non-contact row is 'N/A';
+  - the three filter scenarios match the Scenario_Guide's counts (339 / 115 / 473).
+- **Ingest** keeps 'N/A' and 'None' as text. pandas reads both as missing by default, which would have lost "no porting".
+- **Silver** turns Y/N into 1/0, and a flag that doesn't apply into NULL:
+  - `Broken_PTP_Flag` without a promise: the workbook writes 'N', which would have counted as kept;
+  - the call flags without a contact.
+
+### Gold
+- **Rules:** `business_rules_config` holds the three Scenario_Guide thresholds, the bands (days past due, credit, missed payments, lead time), the 30-promise minimum, the driver spread, the repeat streak, the top-100 list and an empty `handle_cost_per_minute`.
+- **The driver spread is 10 points, not 5:** at 5 the eight states (41.8% to 46.9%) would have read as a driver, but that gap is about what segments of a few hundred promises vary by chance. Call outcome (19 points), credit score (34) and missed payments (13.5) clearly exceed 10.
+- **Views:**
+  - `qry_account_month`, the governed account-month view: bands, call outcome, last month's outcome, repeat streaks, scenario flags;
+  - one metric view, `mv_collections`;
+  - eleven certified views: trend, break drivers, FCR vs promises, contact by segment, transfer cost, repeat after unresolved, scenario summary and accounts, DPD exposure, account history;
+  - two Command Center views.
+  
+  Every view and key column is described.
+- **Removed:** targets, achievement, gap, outlook, outbound, channels, collectors and strategies. The data has none of them.
+- **Promises due after the latest snapshot:** all 1,277 October promises fall due after 1 October 2026 but already have an outcome. Every page, the summary and the Genie instructions use the recorded outcome and say they fall due after the snapshot date.
+- **`deploy.py`:**
+  - the ingest reads the four Optus sheets;
+  - `{{rule:x+1}}` / `{{rule:x-1}}` fill band edges in the metric view;
+  - a rule with no value stops the deploy instead of failing on `float(None)`;
+  - the transform checks the row, account, promise and scenario counts against the workbook;
+  - the executive summary is written from the new views;
+  - amounts are in AUD.
+
+### Genie space (as code)
+- **Sources:** 14 gold tables and views plus the metric view.
+- **Instructions** cover AUD and Australian spelling, the periods, the rate definitions, the scenarios and what the data doesn't have. Thresholds are filled from the rules table (`{{rule:}}`, `{{pct:}}`, `{{pts:}}`).
+- **A guide to which view answers which question.**
+- **Examples:** 29, with one for every source; the first twelve are Optus's Sample_BI_Questions.
+- **Benchmarks:** those twelve questions plus a personal-data refusal.
+
+### App
+- **Command Center:** five chapters, and every figure opens its accounts.
+  1. Promises this month: kept and broken, against the 12-month rate.
+  2. Why promises break: factors that make a clear difference, and those that make little.
+  3. Contact centre: FCR, transfers, repeat calls and handle time, with scenarios 4, 5 and 6.
+  4. Where the money is: overdue balance by days past due, and a 12-month trend chart.
+  5. Scenarios: the six Scenario_Guide scenarios, and the top 100 broken promises.
+- **Explorer:** ten filters (month first, opening on the latest month), the slicer, promises by call outcome, the 12-month trend of the view, account records and CSV export.
+- **Assistant:**
+  - router prompt and `DATA_WORDS` in Optus vocabulary (states, products, FCR, transfers, repeats);
+  - platform guide rewritten for the new screens;
+  - suggestions, quick starts and the library come from Optus's questions;
+  - follow-up and empty-result prompts updated;
+  - answer-cache key details use products, states and call outcomes.
+- **Guardrails:**
+  - Australian phone, Medicare and tax file number patterns;
+  - the classifier and messages cover Optus's scope;
+  - policy checks: causal claims, forecasts, a dollar cost of handle time (there is no cost rate) and probabilities stated as fact. They replace cure rate and probability of hitting a target.
+- **Judge:** Optus band names are not read as figures, and the rule numbers are Optus's.
+- **Branding:**
+  - "LensS Collections Intelligence for Optus", with a small "for Optus" tag;
+  - a light teal and yellow accent on the hero;
+  - Concentrix logo and credit kept;
+  - Responsible AI text for Optus, including Australia's AI Ethics Principles.
+- **Evals:** guardrail, policy and routing cases rewritten in Optus terms. The accuracy cases are Optus's sample questions.
+- **Tests:**
+  - the smoke test checks the new endpoints;
+  - the account lists must match their cards;
+  - the Explorer must reconcile to the Command Center for the latest month;
+  - the routing test conversations use Optus questions.
+- **Removed from this repo:**
+  - LensS Collections' workbook and specification documents;
+  - its docs/ folder, design log, leadership summary, plan and review PDF;
+  - its deploy configs;
+  - the generated `app.yaml` and the template `databricks.yml`, which pointed at its workspace. `app.yaml` is now a placeholder the deploy overwrites.
+
+### Verified (offline, before any deploy)
+- **Server type-check:** passes. Every front-end script parses.
+- **42 offline checks** of the deterministic parts: guardrail patterns, policy checks, router signals, judge figure extraction and answer-cache keys. 41 pass. The one miss is the test's own expectation: the judge reads "550," with its trailing comma, and the value is still recognised as a rule number.
+- **A pandas reproduction of the gold views** on the v2 workbook matches the profile:
+  - latest month: 1,277 promises, 561 broken (43.9%), $107K; 12 months 44.6%;
+  - broken rate by call outcome: 37.9% after FCR, 55.1% after a transfer, 57.0% unresolved;
+  - repeat calls: 44.5% after an unresolved month, 8.2% after FCR;
+  - scenarios 339 / 115 / 473, and 86 repeat callers this month.
+  
+  `deploy.py`'s own `build_exec_summary` ran on those figures and wrote the expected text.
+### Deployed to personal (16 Oct 2026)
+- **Fix found on the first run:** a metric-view field takes at most 10 synonyms (State and Product_Type had 11).
+- **Ingest:** 180,000 / 20 / 6 / 12 rows, as in the workbook.
+- **Transform check:**
+  - 180,000 account-months, 15,000 accounts and 15,648 promises;
+  - scenarios 339 / 115 / 473, as in the Scenario_Guide, and 86 repeat callers.
+- **The executive summary on the warehouse** is word for word the offline one.
+- **Every gold view queried on the warehouse:**
+  - 100 top broken promises, 1,013 scenario-account rows, 39 driver rows;
+  - only credit score (34 points), call outcome (19) and missed payments (13.5) make a clear difference;
+  - the metric view's broken rates by call outcome equal the certified view's.
+- **Created:**
+  - Genie space "LensS Optus Collections Analytics";
+  - database `chatapp-optus` in the shared Lakebase project, with 13 accuracy, 15 guardrail, 8 policy and 40 routing eval cases;
+  - app `lenss-optus-collections`, idle stop 15 minutes;
+  - the cost view.
+- **No smoke or routing tests on personal** (cost); they run in org.
+- **Fix: Observability loaded forever.** The new Command Center script declared a global `dayLabel`, which monitoring.js also declares. The browser then refused to load monitoring.js, so Observability's data was never requested. The server logs showed it: no `/api/admin/usage` or `/insights` calls. The Command Center's copy is now `asOfDate`. No other top-level name is declared in two scripts: cost.js keeps its `renderCost` inside a wrapper.
