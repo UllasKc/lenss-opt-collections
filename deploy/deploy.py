@@ -36,9 +36,13 @@ from pathlib import Path
 
 DEPLOY_DIR = Path(__file__).resolve().parent
 REPO_DIR = DEPLOY_DIR.parent
-STEPS = ["schemas", "ingest", "context", "transform", "views", "summary", "genie", "lakebase", "app", "smoke", "routing"]
-# Run only when named in --only: the live routing test takes 10-15 minutes and real engine calls.
-ON_REQUEST = {"routing"}
+STEPS = ["schemas", "ingest", "context", "transform", "views", "summary", "genie", "lakebase", "app", "smoke", "routing",
+         "org-smoke", "org-routing"]
+# Run only when named in --only: the live routing test takes 10-15 minutes and real engine calls; the org tests
+# (organisation workspace only) take about 40 and 30 minutes.
+ON_REQUEST = {"routing", "org-smoke", "org-routing"}
+# The personal (Free Edition) workspace: the org tests refuse to run there (cost).
+PERSONAL_WORKSPACE_IDS = {"7474660150071734"}
 
 SHEETS = {  # sheet name -> (layer, table)
     "Collections_Fact": ("bronze", "fact_collections_snapshot"),
@@ -1148,7 +1152,7 @@ def step_app(db: Databricks, sql: Sql, cfg: dict, state: dict, cfg_path: Path) -
             f"No redeploy is needed after they run it.")
 
 
-def run_app_test(script: str, label: str, state: dict, db: Databricks) -> None:
+def run_app_test(script: str, label: str, state: dict, db: Databricks, extra: list[str] | None = None) -> None:
     """Runs a test script against the deployed app as the smoke-test service principal, with the
     workspace host and app URL this deploy already knows (no need to look them up)."""
     if not (os.environ.get("LENSS_SMOKE_CLIENT_ID") and os.environ.get("LENSS_SMOKE_CLIENT_SECRET")):
@@ -1159,7 +1163,7 @@ def run_app_test(script: str, label: str, state: dict, db: Databricks) -> None:
     if not host:
         raise DeployError(f"Could not determine workspace host for the {label}; set DATABRICKS_HOST.")
     rc = subprocess.run([sys.executable, str(DEPLOY_DIR / script), "--host", host,
-                         "--app-url", state["app_url"]]).returncode
+                         "--app-url", state["app_url"], *(extra or [])]).returncode
     if rc != 0:
         raise DeployError(f"{label.capitalize()} failed — see output above.")
 
@@ -1172,6 +1176,166 @@ def step_routing(cfg: dict, state: dict, db: Databricks) -> None:
     run_app_test("routing_test.py", "routing test", state, db)
 
 
+def on_personal(cfg: dict, state: dict, cfg_path: Path) -> bool:
+    ws = state.get("workspace_id") or ""
+    return (cfg_path.stem == "personal" or cfg.get("profile") == "personal" or ws in PERSONAL_WORKSPACE_IDS
+            or any(w in (state.get("app_url") or "") for w in PERSONAL_WORKSPACE_IDS))
+
+
+def step_org_smoke(db: Databricks, sql: Sql, cfg: dict, state: dict, cfg_path: Path, test_args: list[str]) -> None:
+    """The org smoke test: workspace checks as the person deploying (app, permissions, data, descriptions,
+    Genie, Lakebase, cost view), then org_smoke_test.py against the app as the smoke-test service principal.
+    Organisation workspace only."""
+    if on_personal(cfg, state, cfg_path):
+        raise DeployError("org-smoke is for the organisation workspace only (it costs ~40 minutes of real usage); "
+                          "this is the personal workspace. Use deploy/config/org2.json on the org laptop.")
+    c, p, name = cfg["catalog"], cfg["schema_prefix"], cfg["app_name"]
+    gold = f"{c}.{p}_gold"
+    results: list[tuple[str, str, str]] = []
+
+    def pc(cid: str, title: str, fn) -> None:
+        try:
+            status, detail = "PASS", fn()
+        except DeployError as e:
+            status, detail = "FAIL", str(e).splitlines()[0][:400]
+        except Exception as e:  # noqa: BLE001 - report every failure, keep going
+            status, detail = ("WARN", str(e)[7:]) if str(e).startswith("[warn] ") else ("FAIL", f"{type(e).__name__}: {e}"[:400])
+        results.append((cid, status, title))
+        print(f"{status:<4} [{cid}] {title}\n       {detail}", flush=True)
+
+    def warn(msg: str) -> Exception:
+        return RuntimeError("[warn] " + msg)
+
+    print("=== ORG SMOKE TEST: workspace checks (as the person deploying) ===", flush=True)
+
+    def app_state():
+        a = db.run("apps", "get", name)
+        compute = (a.get("compute_status") or {}).get("state")
+        dep = ((a.get("active_deployment") or {}).get("status") or {}).get("state")
+        if compute != "ACTIVE" or dep != "SUCCEEDED":
+            raise RuntimeError(f"compute {compute}, deployment {dep} (a stopped app is started by --only app)")
+        return f"{name}: compute ACTIVE, deployment SUCCEEDED, {a.get('url')}"
+    pc("P1", "App is running and its deployment succeeded", app_state)
+
+    def permissions():
+        acl = (db.run("apps", "get-permissions", name) or {}).get("access_control_list", [])
+        level = {(x.get("service_principal_name") or x.get("group_name") or "user"): {q["permission_level"] for q in x.get("all_permissions", [])}
+                 for x in acl}
+        app_sp = (db.run("apps", "get", name) or {}).get("service_principal_client_id")
+        problems = []
+        if cfg.get("idle_stop_minutes") and "CAN_MANAGE" not in level.get(app_sp, set()):
+            problems.append("the app's service principal lacks CAN_MANAGE, so idle stop can't stop it")
+        smoke = os.environ.get("LENSS_SMOKE_CLIENT_ID", "")
+        if smoke and not ({"CAN_USE", "CAN_MANAGE"} & level.get(smoke, set())):
+            problems.append("the smoke-test service principal has no CAN_USE on the app")
+        if cfg.get("readers_group") and not ({"CAN_USE", "CAN_MANAGE"} & level.get(cfg["readers_group"], set())):
+            problems.append(f"readers group {cfg['readers_group']} has no CAN_USE")
+        if cfg.get("demo_givers_group") and "CAN_MANAGE" not in level.get(cfg["demo_givers_group"], set()):
+            problems.append(f"demo givers group {cfg['demo_givers_group']} has no CAN_MANAGE")
+        if problems:
+            raise RuntimeError("; ".join(problems))
+        return (f"app SP CAN_MANAGE (idle stop {cfg.get('idle_stop_minutes') or 'off'} min), smoke SP CAN_USE, "
+                f"readers {cfg.get('readers_group') or 'not set'}, demo givers {cfg.get('demo_givers_group') or 'not set'}; {len(acl)} entries")
+    pc("P2", "App permissions (idle stop, smoke tester, readers, demo givers)", permissions)
+
+    def data_facts():
+        rows, accounts, promises = sql.execute(
+            f"SELECT COUNT(*), COUNT(DISTINCT Account_ID), SUM(PTP_Flag) FROM {gold}.qry_account_month")[0]
+        scen = {str(r[0]): int(r[1]) for r in sql.execute(f"SELECT Scenario_ID, Accounts FROM {gold}.qry_scenario_summary")}
+        rules = int(sql.execute(f"SELECT COUNT(*) FROM {gold}.business_rules_config")[0][0])
+        got = (int(rows), int(accounts), int(promises), scen.get("1"), scen.get("2"), scen.get("3"), rules)
+        msg = (f"{got[0]:,} account-months, {got[1]:,} accounts, {got[2]:,} promises; scenarios {got[3]} / {got[4]} / {got[5]}; "
+               f"{rules} rules")
+        if got != (180000, 15000, 15648, 339, 115, 473, 16):
+            raise warn(f"differs from the v2 workbook (180,000 / 15,000 / 15,648; Scenario_Guide 339 / 115 / 473; 16 rules): {msg}")
+        return msg
+    pc("P3", "Gold data matches the source data", data_facts)
+
+    def described():
+        tables = db.run("tables", "list", c, f"{p}_gold") or []
+        tables = tables if isinstance(tables, list) else tables.get("tables", [])
+        names = {t["name"] for t in tables}
+        missing = [t["name"] for t in tables if not t.get("comment")]
+        expected = {"business_rules_config", "qry_rules", "mv_collections", "qry_account_month", "qry_monthly_trend", "qry_ptp_break_drivers",
+                    "qry_fcr_vs_promises", "qry_contact_by_segment", "qry_transfer_cost", "qry_repeat_after_unresolved", "qry_scenario_accounts",
+                    "qry_scenario_summary", "qry_dpd_exposure", "qry_account_history", "qry_cc_kpis", "qry_cc_top_broken_accounts", "exec_summary"}
+        absent = sorted(expected - names)
+        if absent or missing:
+            raise RuntimeError(f"missing objects {absent}; without a description {missing}")
+        return f"{len(tables)} gold objects, every one described"
+    pc("P4", "Every gold object exists and has a description", described)
+
+    def metric_rules():
+        (mv,) = sql.execute(f"SELECT MEASURE(broken_promises) FROM {gold}.mv_collections WHERE Credit_Band = 'Below 550'")[0]
+        (qv,) = sql.execute(f"SELECT SUM(Broken_PTP_Flag) FROM {gold}.qry_account_month WHERE Credit_Band = 'Below 550'")[0]
+        if int(float(mv or 0)) != int(float(qv or 0)):
+            raise RuntimeError(f"metric view counts {mv} broken promises below 550, certified view {qv}: re-run transform")
+        return f"metric view and certified view agree: {int(float(mv)):,} broken promises with a credit score below 550"
+    pc("P5", "Metric view bands use the rules table's thresholds", metric_rules)
+
+    def genie():
+        sid = state.get("genie_space_id")
+        if not sid:
+            raise RuntimeError("no Genie space in the deploy state (run the genie step)")
+        space = db.run("genie", "get-space", sid)
+        m = db.run("genie", "start-conversation", sid, "How many promises to pay were made in the latest month, and how many were broken?",
+                   check=False) or {}
+        sql_text = " ".join(((a.get("query") or {}).get("query") or "") for a in m.get("attachments") or [])
+        answer = " ".join(((a.get("text") or {}).get("content") or "") for a in m.get("attachments") or [])
+        if m.get("status") != "COMPLETED":
+            raise RuntimeError(f"Genie status {m.get('status')}: {str(m.get('error') or '')[:200]}")
+        view = re.search(r"qry_\w+|mv_collections", sql_text)
+        if not view:
+            raise warn(f"answered without the certified views: {sql_text[:200]} | {answer[:150]}")
+        return f"'{space.get('title')}' answered directly from {view.group(0)}: {answer[:150]}"
+    pc("P6", "Genie space answers a question directly (as you)", genie)
+
+    def lakebase():
+        if "lakebase_host" not in state:
+            raise RuntimeError("no Lakebase in the deploy state (run the lakebase step)")
+        conn = pg_connect(db, state, cfg["lakebase_database"])
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'chatapp'")
+            ntables = cur.fetchone()[0]
+            cur.execute("SELECT category, COUNT(*) FROM chatapp.eval_cases GROUP BY 1 ORDER BY 1")
+            cases = dict(cur.fetchall())
+            cur.execute("SELECT name, version FROM chatapp.cache_versions ORDER BY 1")
+            versions = dict(cur.fetchall())
+        conn.close()
+        if not ntables or not cases:
+            raise RuntimeError(f"{ntables} chatapp tables, eval cases {cases}")
+        return f"{ntables} chatapp tables, eval cases {cases}, cache versions {versions}"
+    pc("P7", "Lakebase database, evaluation cases and cache versions", lakebase)
+
+    def cost_view():
+        try:
+            total, mine, days = sql.execute(f"SELECT ROUND(SUM(cost), 2), ROUND(SUM(cost * project_share), 2), COUNT(DISTINCT usage_date) "
+                                            f"FROM {gold}.qry_platform_cost")[0]
+        except DeployError as e:
+            raise warn(f"no cost view ({str(e).splitlines()[0][:120]}): the cost page shows 'Coming soon'")
+        (bad,) = sql.execute(f"SELECT COUNT(*) FROM {gold}.qry_platform_cost WHERE project_share < 0 OR project_share > 1")[0]
+        if int(bad):
+            raise RuntimeError(f"{bad} rows with a share outside 0-1")
+        return f"this project ${mine} of workspace ${total} over {days} days"
+    pc("P8", "Cost view (this project's Databricks cost)", cost_view)
+
+    pc("P9", "Smoke-test credentials are set",
+       lambda: "LENSS_SMOKE_CLIENT_ID / SECRET set" if os.environ.get("LENSS_SMOKE_CLIENT_ID") and os.environ.get("LENSS_SMOKE_CLIENT_SECRET")
+       else (_ for _ in ()).throw(DeployError("set LENSS_SMOKE_CLIENT_ID and LENSS_SMOKE_CLIENT_SECRET (setx), then open a new terminal")))
+
+    failed = [r for r in results if r[1] == "FAIL"]
+    print(f"Workspace checks: {sum(r[1] == 'PASS' for r in results)} passed, {sum(r[1] == 'WARN' for r in results)} warnings, "
+          f"{len(failed)} failed\n", flush=True)
+    app_failed = None
+    try:
+        run_app_test("org_smoke_test.py", "org smoke test", state, db, test_args)
+    except DeployError as e:
+        app_failed = e
+    if failed or app_failed:
+        raise DeployError(f"Org smoke test: {len(failed)} workspace check(s) failed"
+                          + (f" ({', '.join(r[0] for r in failed)})" if failed else "") + ("; app checks failed (see above)" if app_failed else ""))
+
+
 # --------------------------------------------------------------------------- main
 
 def main() -> None:
@@ -1180,6 +1344,7 @@ def main() -> None:
     ap.add_argument("--only", help=f"Comma-separated steps to run: {','.join(STEPS)} "
                     f"({', '.join(sorted(ON_REQUEST))} only when named here)")
     ap.add_argument("--skip", help="Comma-separated steps to skip")
+    ap.add_argument("--test-args", default="", help='Extra arguments for the org smoke or org routing test, e.g. "--sections E,F --skip-slow" or "--matrix-only"')
     args = ap.parse_args()
 
     cfg_path = Path(args.config).resolve()
@@ -1231,6 +1396,16 @@ def main() -> None:
                 if "app_url" not in state:
                     raise DeployError("'routing' needs a deployed app — run the app step first.")
                 step_routing(cfg, state, db)
+            elif step == "org-smoke":
+                if "app_url" not in state:
+                    raise DeployError("'org-smoke' needs a deployed app — run the app step first.")
+                step_org_smoke(db, sql, cfg, state, cfg_path, args.test_args.split())
+            elif step == "org-routing":
+                if "app_url" not in state:
+                    raise DeployError("'org-routing' needs a deployed app — run the app step first.")
+                if on_personal(cfg, state, cfg_path):
+                    raise DeployError("org-routing is for the organisation workspace only (real usage); this is the personal workspace.")
+                run_app_test("org_routing_test.py", "org routing test", state, db, args.test_args.split())
             if step in ("ingest", "transform", "views", "summary"):
                 # New gold data or views → cached answers may be wrong. One stamp per run, so a full deploy bumps once.
                 bump_cache_version(db, cfg, state, cfg_path, "data", run_stamp)

@@ -8,6 +8,25 @@ Versions match git tags where one exists.
 
 ## Unreleased
 
+- **Fix: one database error stopped the whole app.**
+  - **What happened on personal:** the shared Lakebase endpoint was disabled ("The endpoint has been disabled"). `GET /api/chat/sessions` awaited it with no try/catch. Express 4 doesn't catch a rejected async handler, so the rejection went unhandled and Node stopped the server. The Assistant then showed "Sorry, that question couldn't be answered".
+  - **The fix:** every router is wrapped (`server/lib/asyncRoutes.ts`, `catchAsync`), so an async error reaches one error handler. It answers 503 "a data service is unavailable" for Lakebase or warehouse outages and 500 otherwise, and closes a stream already under way. A failure in background work is logged, never fatal (`unhandledRejection`).
+  - **Verified locally:** a handler failing like the disabled endpoint gets a 503 and the server keeps answering; type-check passes.
+  - **Not yet deployed:** the personal workspace's Lakebase endpoint is disabled and its warehouse won't start.
+- **Org test suites for the org laptop,** modelled on the Lens MLOps ones. Both refuse to run on the personal workspace. See README, "Org tests".
+  - **`deploy/org_smoke_test.py`, sections A–K (about 40 minutes):**
+    - the Command Center's headline adds up and matches the source data;
+    - every "View accounts" list matches its card, and the driver and transfer lists add up;
+    - the Explorer reconciles to the Command Center for the latest month and the 12 months;
+    - Optus's 12 sample questions, each checked for its fact (from the app's own figures, so a data change doesn't break them);
+    - guardrails and policy for Optus: no forecast, target, handle-time dollar cost, causal claim, contact details or outbound channels;
+    - the in-app evaluations, clicks and buttons, six live conversations, sessions and memory, the answer cache.
+  - **Workspace checks:** `--only org-smoke` first runs nine checks as the person deploying (P1–P9): app, permissions including the demo-givers group, data vs the workbook, descriptions, metric-view bands, Genie, Lakebase, cost view, credentials.
+  - **`deploy/org_routing_test.py`, about 30 minutes:** a 261-probe routing grid (22 messages × 3 settings × 4 starting points) plus end-to-end clicks and the six conversations.
+  - **Firm rules verified offline:** every firm rule holds for all 12,789 combinations of probe and router-model reading through the real `decide()`, so a FAIL is a real routing bug.
+  - **New deploy steps:** `org-smoke` and `org-routing` (only when named) and `--test-args`. `routing_test.py` now exposes `run_conversations` for both suites.
+  - **Not run yet:** they need the org deployment and the test service principal.
+- The cost route's fallback schema name is now Optus's, like the other routes.
 - **Optus diagrams** (`docs/`, PNG and SVG), adapted from the LensS Collections set. Every fact comes from the Optus build: Optus's data and views, 16 business rules, 29 Genie examples and Optus's 12 sample questions as benchmarks, the `chatapp-optus` database, no targets or outbound.
   - `LensS_Optus_How_It_Works`: the four steps for a non-technical audience.
   - `LensS_Optus_Architecture`: the technical view, including the medallion pipeline and the 11-step deploy.

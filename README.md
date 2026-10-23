@@ -139,6 +139,68 @@ python deploy/deploy.py --config deploy/config/<config>.json --only routing
 
 `--only routing` runs only when named; a full deploy never runs it. The routing evaluation in the app (Observability → Evaluations → Routing) checks the router alone, in about a minute.
 
+### Org tests (run these on the org laptop)
+
+Two fuller suites, for the organisation workspace only. Both refuse to run against the personal workspace (cost), print PASS / WARN / FAIL / SKIP for every check, and write a log to `deploy/.state/`. A WARN is for a person to judge: a worded answer, or a figure that differs from the source data as profiled. It doesn't fail the run.
+
+**Once on the org laptop:**
+1. `git pull`, then `pip install -r deploy/requirements.txt`.
+2. `databricks auth login --host https://<org workspace> --profile lenss-org2`.
+3. Deploy (or update) the app: `python deploy/deploy.py --config deploy/config/org2.json`.
+4. Set the test service principal's credentials. It needs CAN_USE on the app (it's in the readers group). After setting them, open a new terminal:
+
+   ```bat
+   setx LENSS_SMOKE_CLIENT_ID <service principal application id>
+   setx LENSS_SMOKE_CLIENT_SECRET <its OAuth secret>
+   setx PYTHONIOENCODING utf-8
+   ```
+
+**Org smoke test** (about 40 minutes):
+
+```bash
+python deploy/deploy.py --config deploy/config/org2.json --only org-smoke
+python deploy/deploy.py --config deploy/config/org2.json --only org-smoke --test-args "--sections B,C --skip-slow"   # a quick subset
+```
+
+First, 9 workspace checks run as you (P1–P9):
+- the app is running and its permissions are right;
+- the gold data matches the v2 workbook (180,000 / 15,000 / 15,648; scenarios 339 / 115 / 473; 16 rules);
+- every gold object exists and is described;
+- the metric view bands match the certified views;
+- Genie answers directly;
+- Lakebase and its eval cases are in place;
+- the cost view works and your credentials are set.
+
+Then the app checks, as the service principal (sections A–K):
+
+| Section | What it checks |
+|---|---|
+| A. Access | Tokens are needed; the page says "for Optus" and credits Concentrix; every asset loads |
+| B. Command Center | The headline adds up and matches the source data; every panel has data; the rules reach the app and the drivers follow them; every "View accounts" list matches its card; driver and transfer lists add up; hostile input is refused; the summary; caching |
+| C. Explorer | Filter options; reconciles to the Command Center for the latest month and the 12 months; each product sums to the book; combined filters; hostile filters |
+| D. Observability | Usage, insights, the eval cases (13 / 15 / 8 / 42), the 15 data sources, the cost page, the suggestions |
+| E. Key questions | Optus's 12 Sample_BI_Questions, each with the fact the answer should contain (e.g. WA highest broken rate, 62.1% kept after FCR vs 44.9% after a transfer), plus a deep analysis and the answer's trace and quality score |
+| F. Guardrails and policy | Injection, abuse, personal details (email, Australian mobile), off-topic, a thank-you; no forecast, no target, no dollar cost of handle time, no causal claim, no contact details, no outbound channels |
+| G. Evaluations | Runs the in-app suites: routing, guardrail and policy must all pass; accuracy misses are warnings |
+| H. Clicks and buttons | Clicked suggestions, "Answer from the data instead", "Go deeper" |
+| I. Conversations | The three routing-test conversations plus three org ones (pushback, Quick kept for a multi-step question, memory) |
+| J. Sessions | Chart and naming, a follow-up, history, feedback, the audit trail, memory, rename and delete |
+| K. Answer cache | A suggested question from the cache; Refresh answers live |
+
+**Org routing test** (about 30 minutes):
+
+```bash
+python deploy/deploy.py --config deploy/config/org2.json --only org-routing
+python deploy/deploy.py --config deploy/config/org2.json --only org-routing --test-args "--matrix-only"   # router decisions only
+```
+
+1. **Routing grid:** 22 kinds of message × Auto / Quick / Deep × 4 starting points: a new chat, after a quick data answer, after a deep analysis, and after a guide answer. That's about 260 router decisions, with no query-engine calls.
+   - **FAIL:** a firm rule of `router.ts` was broken. Every firm rule was checked offline against `decide()` for every possible router-model reading (12,789 decisions), so a FAIL is a real routing bug.
+   - **WARN:** the router model's judgement went the other way where the rules let it decide.
+2. **End to end:** clicked suggestions and buttons in each mode, then the six live conversations.
+
+Paste the summary at the end of each log (or the whole log) back for review.
+
 ## Repository layout
 
 | Path | Contents |
