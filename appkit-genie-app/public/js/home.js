@@ -258,20 +258,26 @@ function renderDrivers(s, o) {
     (flat.length ? `; ${hEsc(flat.map(f => f.factor.toLowerCase()).join(', '))} make little difference.` : '.') +
     ` These are observed differences, not proven causes.`);
   document.getElementById('drivers').innerHTML = strong.map(f => {
-    const max = Math.max(...f.rows.map(r => num(r.Broken_Rate) || 0), overall || 0) * 1.08;
-    const rows = f.rows.slice().sort((a, b) => (num(a.Segment_Order) - num(b.Segment_Order)) || String(a.Segment).localeCompare(String(b.Segment)));
+    // The call-outcome card shows contacted customers only: "No contact" is not a call outcome, and
+    // its line is the broken rate of contacted customers' promises, so the colours compare like with like.
+    const callCard = f.factor === 'Call outcome';
+    const shown = callCard ? f.rows.filter(r => r.Segment !== 'No contact') : f.rows;
+    const p = shown.reduce((a, r) => a + (num(r.Promises) || 0), 0);
+    const base = callCard && p ? shown.reduce((a, r) => a + (num(r.Promises) || 0) * (num(r.Broken_Rate) || 0), 0) / p : overall;
+    const max = Math.max(...shown.map(r => num(r.Broken_Rate) || 0), base || 0) * 1.08;
+    const rows = shown.slice().sort((a, b) => (num(a.Segment_Order) - num(b.Segment_Order)) || String(a.Segment).localeCompare(String(b.Segment)));
     const body = rows.map(r => {
       const few = String(r.Meets_Min_Volume) !== '1';
-      const d = num(r.Difference_vs_Overall);
+      const d = callCard ? num(r.Broken_Rate) - base : num(r.Difference_vs_Overall);
       return bar(hEsc(r.Segment), num(r.Broken_Rate), max, pct(r.Broken_Rate), few ? 'brand' : d > 0.03 ? 'bad' : d < -0.03 ? 'good' : 'brand',
         `${count(r.Promises)} promises · ${money(r.Broken_Amount)} broken${few ? ` · fewer than ${count(minP)} promises, not ranked` : ''} ` +
         viewBtn('segment_broken', 'View broken', `${f.factor}|${r.Segment}`, `Broken promises: ${f.factor.toLowerCase()} ${r.Segment}, 12 months`, true),
-        overall, `Overall ${pct(overall)}`, few ? 'muted-row' : '');
+        base, `${callCard ? 'Contacted customers' : 'Overall'} ${pct(base)}`, few ? 'muted-row' : '');
     }).join('');
     return `<div class="card panel driver-card"><div class="panel-head"><div><h3>${hEsc(f.factor)}</h3>
         <div class="panel-sub"><span class="strength clear">Clear difference: ${brokenRange(f)}</span> ${pct(f.hi.Broken_Rate)} for <b>${hEsc(f.hi.Segment)}</b>, ${pct(f.lo.Broken_Rate)} for <b>${hEsc(f.lo.Segment)}</b></div></div>
         ${askBtn(`Why do promises to pay break more often for some ${f.factor.toLowerCase()} segments, and what should we do about it?`, 'agent')}</div>
-      <div class="panel-body">${body}<div class="panel-note">Each bar: the share of that segment's promises that broke, 12 months. The line marks the overall rate (${pct(overall)}). Red: more than 3 percentage points above it; green: more than 3 below; faded: fewer than ${count(minP)} promises, not ranked.</div></div></div>`;
+      <div class="panel-body">${body}<div class="panel-note">Each bar: the share of that segment's promises that broke, 12 months.${callCard ? ' Contacted customers only.' : ''} The line marks the ${callCard ? "contacted customers'" : 'overall'} rate (${pct(base)}). Red: more than 3 percentage points above it; green: more than 3 below; faded: fewer than ${count(minP)} promises, not ranked.</div></div></div>`;
   }).join('');
   panel('pnlFlat', 'Factors that make little difference', `Their segments' broken rates differ by less than ${Math.round(ruleVal(s, 'driver_spread_pts', 0.10) * 100)} percentage points: knowing them doesn't tell you which promises will break.`,
     { q: 'Do product, state, porting status, contract renewal or new product interest affect whether promises to pay are broken?', mode: 'chat' },

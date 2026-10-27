@@ -8,6 +8,15 @@ Versions match git tags where one exists.
 
 ## Unreleased
 
+### Call-outcome driver card
+- Command Center chapter 2: the call-outcome card shows contacted customers only (no "No contact" bar). Its line and colours compare against contacted customers' broken rate (45.4%), not the overall 44.6%.
+
+### Explorer tiles
+- The Accounts and Overdue accounts tiles are removed; the account count is still in the line under the Explorer title.
+
+### Error handling aligned with LensS v1.12.7
+- 503 only for real outages: connection failures, a disabled or suspended endpoint, a stopped warehouse, capacity errors. The bare "503" and the broad "warehouse" patterns are dropped, so an ordinary SQL error stays a 500.
+
 ### Optus logo (2026-10-23, at the user's request)
 - The Optus logo (supplied by the user, cropped to `public/img/optus-logo.png`) replaces the "FOR OPTUS" text tag in the header ("for [logo]"). It also appears on its own, in a white chip, at the top of the Command Center hero, and in the footer. It sits on a white chip so it reads the same in light and dark mode. The page title still says "for Optus". This reverses the v1.0.0 choice of no Optus logo; it is still LensS, powered by Concentrix, presented for Optus, not by Optus.
 

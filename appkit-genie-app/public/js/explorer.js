@@ -173,8 +173,6 @@
     const share = (key) => (others && num(b[key]) ? `<span class="xk-d">${pct(num(t[key]) / num(b[key]), 1)} of the book</span>` : '');
     const several = num(t.months) > 1;
     const tiles = [
-      ['Accounts', count(t.accounts), share('accounts')],
-      [several ? 'Overdue accounts (monthly avg)' : 'Overdue accounts', count(t.overdue_accounts), share('overdue_accounts')],
       [several ? 'Overdue balance (monthly avg)' : 'Overdue balance', money(t.overdue_balance), share('overdue_balance')],
       ['Promises to pay', count(t.promises), `<span class="xk-d">${money(t.promised_amount)} promised</span>`],
       ['Broken-promise rate', pct(t.broken_rate), delta('broken_rate', false)],

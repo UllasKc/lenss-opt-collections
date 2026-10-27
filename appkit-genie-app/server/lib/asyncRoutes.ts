@@ -25,7 +25,9 @@ export function catchAsync(router: express.Router): express.Router {
   return router;
 }
 
-const UNAVAILABLE = /endpoint has been disabled|endpoint .*(suspended|stopped|not running)|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|terminating connection|connection terminated|Connection terminated|warehouse.*(stopped|not running|unavailable)|Cannot create the resource|TEMPORARILY_UNAVAILABLE|503/i;
+// Only messages that mean a service is down or unreachable (aligned with LensS v1.12.7); an ordinary SQL or
+// Postgres error stays a 500.
+const UNAVAILABLE = /endpoint has been disabled|endpoint .*(suspended|stopped|not running)|ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENOTFOUND|terminating connection|connection terminated|too many (clients|connections)|password authentication failed|Cannot create the resource|RESOURCE_EXHAUSTED|TEMPORARILY_UNAVAILABLE|Service Unavailable|warehouse (is )?(stopped|starting|not running|unavailable)/i;
 
 export const errorHandler: express.ErrorRequestHandler = (err, req, res, _next) => {
   const message = err instanceof Error ? err.message : String(err);
