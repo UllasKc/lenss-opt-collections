@@ -53,7 +53,6 @@ function dashboardCache(db: Lakebase) {
 /** A factor of qry_ptp_break_drivers and the qry_account_month column (or expression) behind its segments. */
 const FACTOR_COLUMN: Record<string, string> = {
   'Call outcome': 'b.Call_Outcome',
-  'Credit score': 'b.Credit_Band',
   'Missed payments (last 12 months)': 'b.Missed_Payments_Band',
   'Days past due': 'b.DPD_Bucket',
   'Promise lead time': 'b.PTP_Lead_Band',
@@ -108,7 +107,7 @@ export function buildDashboardRouter(db: Lakebase): express.Router {
       q(`SELECT * FROM ${GOLD}.qry_repeat_after_unresolved ORDER BY Prior_Outcome_Order`),
       q(`SELECT * FROM ${GOLD}.qry_scenario_summary ORDER BY Scenario_ID`),
       q(`SELECT * FROM ${GOLD}.qry_dpd_exposure ORDER BY DPD_Bucket_Order`),
-      q(`SELECT Account_ID, State, Product_Type, Credit_Score, Outstanding_Balance, Days_Past_Due, PTP_Amount,
+      q(`SELECT Account_ID, State, Product_Type, Outstanding_Balance, Days_Past_Due, PTP_Amount,
                 CAST(PTP_Due_Date AS STRING) AS PTP_Due_Date, Call_Outcome, Missed_Payments_L12M
            FROM ${GOLD}.qry_cc_top_broken_accounts ORDER BY Outstanding_Balance DESC LIMIT 8`),
     ]);
@@ -183,7 +182,7 @@ export function buildDashboardRouter(db: Lakebase): express.Router {
         runSql(`SELECT COUNT(*) AS rows, COUNT(DISTINCT b.Account_ID) AS accounts, SUM(b.Outstanding_Balance) AS balance,
                        SUM(b.Overdue_Balance) AS overdue_balance, SUM(b.PTP_Amount) AS promised, SUM(b.Broken_PTP_Amount) AS broken_amount
                   ${FROM} ${where}`),
-        runSql(`SELECT b.Account_ID, b.Snapshot_Month, b.State, b.Product_Type, b.Credit_Score, b.Outstanding_Balance, b.Days_Past_Due,
+        runSql(`SELECT b.Account_ID, b.Snapshot_Month, b.State, b.Product_Type, b.Outstanding_Balance, b.Days_Past_Due,
                        b.DPD_Bucket, b.PTP_Amount, CAST(b.PTP_Due_Date AS STRING) AS PTP_Due_Date, b.Broken_PTP_Flag, b.Call_Outcome,
                        b.Repeat_Call_Flag, b.Handle_Time_Seconds, b.Missed_Payments_L12M, b.Porting_Status,
                        b.Contract_Renewal_Window_Flag, b.New_Product_Interest_Flag

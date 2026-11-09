@@ -1,11 +1,11 @@
 # LensS Collections Intelligence for Optus
 
-Decision intelligence for Optus's telecom collections, built on Databricks by the Concentrix Data & Analytics Practice and presented as **Concentrix LensS**. It is LensS, powered by Concentrix, set up for Optus with Optus's demo data; the Optus logo marks it as prepared for Optus (header, Command Center, footer). Governed bronze → silver → gold data feeds a web app with four tabs:
+Decision intelligence for Optus's telecom collections, built on Databricks by the Concentrix Data & Analytics Practice and presented as **Concentrix LensS**. It is LensS, powered by Concentrix, set up for Optus with Optus's demo data, without credit score (Optus does not use one; the version with it is tagged `v1.0-with-credit-score`); the Optus logo marks it as prepared for Optus (header, Command Center, footer). Governed bronze → silver → gold data feeds a web app with four tabs:
 
 | Tab | What it does |
 |---|---|
-| **Command Center** | An executive summary ("the month in 30 seconds"), then one story in five chapters: where promises to pay stand this month, why they break, how the contact centre is doing and what it does to promises, where the money is, and which customers need a different conversation (scenarios 1, 3, 4, 5 and 6 of Optus's Scenario Guide; Optus does not use credit score, so it is left out of the front end, and Scenario 2, which is defined by it, with it). Every figure opens the accounts behind it |
-| **Explorer** | Self-service drill-down by month, product, state, credit score, days past due, missed payments, call outcome, porting, renewal window and new product interest, with the accounts behind each item and CSV export. A heatmap of any two dimensions (product by arrears stage by default; broken, kept or promise rate, FCR, transfers, repeats or overdue balance), charts of promised money kept against broken and of call outcomes, and a 12-month trend chart |
+| **Command Center** | An executive summary ("the month in 30 seconds"), then one story in five chapters: where promises to pay stand this month, why they break, how the contact centre is doing and what it does to promises, where the money is, and which customers need a different conversation (five scenarios, numbered 1 to 5, from Optus's Scenario Guide). Every figure opens the accounts behind it |
+| **Explorer** | Self-service drill-down by month, product, state, days past due, missed payments, call outcome, porting, renewal window and new product interest, with the accounts behind each item and CSV export. A heatmap of any two dimensions (product by arrears stage by default; broken, kept or promise rate, FCR, transfers, repeats or overdue balance), charts of promised money kept against broken and of call outcomes, and a 12-month trend chart |
 | **Assistant** | Plain-language questions answered by a Genie space ("LensS query engine"): Quick answer, Deep analysis or Auto, with a conversation-aware router (data or platform guide, quick or deep, escalation to a deep analysis when an answer is not enough or a question is asked again), conversation memory, charts, SQL and a quality score |
 | **Observability** | Pipeline traces, answer quality and faithfulness, performance, drift, security and guardrails, Evaluations, Responsible AI and Databricks cost |
 
@@ -21,8 +21,8 @@ Every Command Center and Explorer figure comes from certified SQL views; no AI c
 |---|---|---|
 | `Collections_Fact` | `bronze.fact_collections_snapshot` → `silver` → gold | 15,000 accounts × 12 monthly snapshots (1 Nov 2025 to 1 Oct 2026), 180,000 rows: balance, days past due, missed payments, the promise to pay and whether it broke, the month's contact (first call resolution, transfer, repeat call, handle time), credit score, product, state, porting, renewal window, new product interest |
 | `Data_Dictionary` | `context.data_dictionary` | Optus's column definitions; the source of the view and column descriptions |
-| `Scenario_Guide` | `context.scenario_guide` | Six scenarios: three account filters (counts 339 / 115 / 473 at the latest snapshot, which the deploy checks) and three analytical ones |
-| `Sample_BI_Questions` | `context.sample_bi_questions` | Twelve questions: the Genie space's first examples and its benchmarks |
+| `Scenario_Guide` | `context.scenario_guide` | Five scenarios used, renumbered 1 to 5 (the guide's credit-score scenario is dropped): two account filters (counts 339 / 473 at the latest snapshot, which the deploy checks), the repeat callers and two analytical ones |
+| `Sample_BI_Questions` | `context.sample_bi_questions` | Ten questions (the two about credit score are dropped): the Genie space's first examples and its benchmarks |
 
 How silver reads it:
 - **Flags** become 1/0. A flag that doesn't apply is NULL: `Broken_PTP_Flag` without a promise (the workbook writes 'N'), and the FCR, transfer and repeat flags and handle time without a contact (the workbook writes 'N/A'). `Porting_Status` keeps 'None'. The ingest keeps 'N/A' and 'None' as text, not missing values.
@@ -164,7 +164,7 @@ python deploy/deploy.py --config deploy/config/org2.json --only org-smoke --test
 
 First, 9 workspace checks run as you (P1–P9):
 - the app is running and its permissions are right;
-- the gold data matches the v2 workbook (180,000 / 15,000 / 15,648; scenarios 339 / 115 / 473; 16 rules);
+- the gold data matches the v2 workbook (180,000 / 15,000 / 15,648; scenario 1 = 339, 2 = 473, ids 1, 2, 5; 13 rules);
 - every gold object exists and is described;
 - the metric view bands match the certified views;
 - Genie answers directly;
@@ -179,7 +179,7 @@ Then the app checks, as the service principal (sections A–K):
 | B. Command Center | The headline adds up and matches the source data; every panel has data; the rules reach the app and the drivers follow them; every "View accounts" list matches its card; driver and transfer lists add up; hostile input is refused; the summary; caching |
 | C. Explorer | Filter options; reconciles to the Command Center for the latest month and the 12 months; each product sums to the book; combined filters; hostile filters |
 | D. Observability | Usage, insights, the eval cases (13 / 15 / 8 / 42), the 15 data sources, the cost page, the suggestions |
-| E. Key questions | Optus's 12 Sample_BI_Questions, each with the fact the answer should contain (e.g. WA highest broken rate, 62.1% kept after FCR vs 44.9% after a transfer), plus a deep analysis and the answer's trace and quality score |
+| E. Key questions | Optus's Sample_BI_Questions (E4 now checks that a credit-score question is answered with "not in this data"), each with the fact the answer should contain (e.g. WA highest broken rate, 62.1% kept after FCR vs 44.9% after a transfer), plus a deep analysis and the answer's trace and quality score |
 | F. Guardrails and policy | Injection, abuse, personal details (email, Australian mobile), off-topic, a thank-you; no forecast, no target, no dollar cost of handle time, no causal claim, no contact details, no outbound channels |
 | G. Evaluations | Runs the in-app suites: routing, guardrail and policy must all pass; accuracy misses are warnings |
 | H. Clicks and buttons | Clicked suggestions, "Answer from the data instead", "Go deeper" |
@@ -225,9 +225,9 @@ Paste the summary at the end of each log (or the whole log) back for review.
 | `qry_monthly_trend` | The month-by-month trend |
 | `qry_ptp_break_drivers` | Why promises break: the broken rate of each segment of ten factors over 12 months, with whether the factor makes a clear difference |
 | `qry_fcr_vs_promises` | Scenario 4: promises and broken rates by call outcome |
-| `qry_contact_by_segment`, `qry_transfer_cost` | FCR, transfers, repeats and handle time by product, state, credit band or days past due; scenario 5 by state × product |
+| `qry_contact_by_segment`, `qry_transfer_cost` | FCR, transfers, repeats and handle time by product, state or days past due; scenario 5 by state × product |
 | `qry_repeat_after_unresolved` | Scenario 6: repeat calls by last month's call outcome |
-| `qry_scenario_summary`, `qry_scenario_accounts` | Scenarios 1, 2, 3 and 6 at the latest snapshot: sizes, balances and the accounts |
+| `qry_scenario_summary`, `qry_scenario_accounts` | Scenarios 1, 2 and 5 at the latest snapshot: sizes, balances and the accounts |
 | `qry_dpd_exposure` | Overdue balance by days-past-due bucket, latest month |
 | `qry_account_history` | Each account over the 12 months |
 | `qry_cc_kpis`, `qry_cc_top_broken_accounts` | The Command Center headline (latest month, last month, 12 months) and the 100 broken promises with the most at stake |
@@ -235,8 +235,8 @@ Paste the summary at the end of each log (or the whole log) back for review.
 ## Business rules and view descriptions
 
 - **Every threshold is a row in `gold.business_rules_config`** (`deploy/sql/40_gold_config.sql`):
-  - the three Scenario Guide thresholds: more than 30 days past due; credit score below 550; 2+ missed payments;
-  - the bands for days past due, credit score, missed payments and promise lead time;
+  - the two Scenario Guide thresholds used: more than 30 days past due; 2+ missed payments;
+  - the bands for days past due, missed payments and promise lead time;
   - the 30-promise minimum before a segment is ranked;
   - the 10-point spread for a factor to "make a clear difference";
   - the 2-month repeat streak and the top-100 list;

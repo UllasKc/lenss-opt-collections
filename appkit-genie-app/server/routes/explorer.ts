@@ -13,7 +13,6 @@ const DIMS: Record<string, { col: (a?: string) => string; order?: string }> = {
   month: { col: (a = '') => `${a}Snapshot_Month`, order: 'MIN(Snapshot_Date)' },
   product: { col: (a = '') => `${a}Product_Type` },
   state: { col: (a = '') => `${a}State` },
-  credit: { col: (a = '') => `${a}Credit_Band`, order: 'MIN(Credit_Band_Order)' },
   bucket: { col: (a = '') => `${a}DPD_Bucket`, order: 'MIN(DPD_Bucket_Order)' },
   missed: { col: (a = '') => `${a}Missed_Payments_Band`, order: 'MIN(Missed_Payments_Band_Order)' },
   outcome: { col: (a = '') => `${a}Call_Outcome`, order: 'MIN(Call_Outcome_Order)' },
@@ -49,8 +48,7 @@ const MEASURES = `
   1.0*SUM(Transferred_Flag)/NULLIF(SUM(Contacted_Flag),0) AS transfer_rate,
   1.0*SUM(Repeat_Call_Flag)/NULLIF(SUM(Contacted_Flag),0) AS repeat_rate,
   AVG(Handle_Time_Seconds) AS avg_handle,
-  SUM(Repeat_After_Unresolved_Flag) AS repeat_after_unresolved,
-  AVG(Credit_Score) AS avg_credit`;
+  SUM(Repeat_After_Unresolved_Flag) AS repeat_after_unresolved`;
 
 type Rows = Record<string, string | null>[];
 type Options = { dims: Record<string, string[]>; latestMonth: string | null };
@@ -136,7 +134,7 @@ export function buildExplorerRouter(db: Lakebase): express.Router {
         const [[totals], rows] = await Promise.all([
           runSql(`SELECT COUNT(*) AS rows, COUNT(DISTINCT b.Account_ID) AS accounts, SUM(b.Outstanding_Balance) AS balance,
                          SUM(b.Overdue_Balance) AS overdue_balance, SUM(b.PTP_Amount) AS promised, SUM(b.Broken_PTP_Amount) AS broken_amount ${from} ${w}`),
-          runSql(`SELECT b.Account_ID, b.Snapshot_Month, b.State, b.Product_Type, b.Credit_Score, b.Outstanding_Balance, b.Days_Past_Due,
+          runSql(`SELECT b.Account_ID, b.Snapshot_Month, b.State, b.Product_Type, b.Outstanding_Balance, b.Days_Past_Due,
                          b.DPD_Bucket, b.PTP_Amount, CAST(b.PTP_Due_Date AS STRING) AS PTP_Due_Date, b.Broken_PTP_Flag, b.Call_Outcome,
                          b.Repeat_Call_Flag, b.Handle_Time_Seconds, b.Missed_Payments_L12M, b.Porting_Status,
                          b.Contract_Renewal_Window_Flag, b.New_Product_Interest_Flag
@@ -173,7 +171,7 @@ export function buildExplorerRouter(db: Lakebase): express.Router {
           q(`SELECT ${MEASURES} FROM ${BASE} ${where}`),
           cached(`book:${applied.month ?? ''}`, () => q(`SELECT ${MEASURES} FROM ${BASE} ${monthOnly}`)),
           q(`SELECT Snapshot_Month AS k, MIN(Snapshot_Date) AS d, ${MEASURES} FROM ${BASE} ${trendWhere} GROUP BY Snapshot_Month ORDER BY d`),
-          q(`SELECT Account_ID, Snapshot_Month, State, Product_Type, Credit_Score, Credit_Band, Outstanding_Balance, Overdue_Balance,
+          q(`SELECT Account_ID, Snapshot_Month, State, Product_Type, Outstanding_Balance, Overdue_Balance,
                     Days_Past_Due, DPD_Bucket, PTP_Flag, PTP_Amount, CAST(PTP_Due_Date AS STRING) AS PTP_Due_Date, Broken_PTP_Flag,
                     Call_Outcome, Repeat_Call_Flag, Handle_Time_Seconds, Missed_Payments_L12M, Porting_Status,
                     Contract_Renewal_Window_Flag, New_Product_Interest_Flag

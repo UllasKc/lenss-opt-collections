@@ -92,11 +92,11 @@ const KPI_DICT = [
   ['Transferred', 'Calls that needed a second agent.', 'Contacted accounts whose call was transferred ÷ contacted accounts.'],
   ['Left unresolved', 'Calls that ended without a fix.', 'Contacted accounts neither resolved first time nor transferred ÷ contacted accounts. Resolved first time, transferred and left unresolved add up to 100%; calling again is counted separately.'],
   ['Called again (repeat)', 'Customers who had to come back.', 'Contacted accounts that called again within about 7 to 14 days (Optus\'s repeat-call flag) ÷ contacted accounts.'],
-  ['Repeat after an unresolved call', 'Scenario 6, Repeat Caller Frustration.', 'Accounts that called again this month after a call last month that was not resolved first time.'],
+  ['Repeat after an unresolved call', 'Scenario 5, Repeat Caller Frustration.', 'Accounts that called again this month after a call last month that was not resolved first time.'],
   ['Average handle time', 'Effort per call.', 'Average handle time in seconds of contacted accounts. No cost per minute has been supplied, so no dollar cost is shown.'],
   ['Why promises break', 'Where to act.', 'The broken-promise rate of each segment over 12 months of promises. A factor makes a clear difference when its segments (30+ promises each) are at least 10 percentage points apart (business rule driver_spread_pts); otherwise little difference. Observed, not causal.'],
   ['Days-past-due bucket', 'The bands used everywhere.', 'Days past due 1–30, 31–60, 61–90, 91+, from the business rules.'],
-  ['Scenarios', 'Optus\'s Scenario Guide.', '1 Upgrade-but-Overdue: new product interest and more than 30 days past due. 3 Churn Risk at Renewal: 2+ missed payments in the renewal window. 4 FCR against kept promises. 5 Transfers and handle time. 6 Repeat calls after an unresolved call. Counts are at the latest snapshot.'],
+  ['Scenarios', 'Optus\'s Scenario Guide.', '1 Upgrade-but-Overdue: new product interest and more than 30 days past due. 2 Churn Risk at Renewal: 2+ missed payments in the renewal window. 3 FCR against kept promises. 4 Transfers and handle time. 5 Repeat calls after an unresolved call. (The credit-score scenario of the Scenario Guide is not used.) Counts are at the latest snapshot.'],
 ];
 function openKpiDict() {
   document.getElementById('kpiDictBody').innerHTML = `<p class="score-reason">Optus collections, 12 monthly snapshots (November 2025 to October 2026), amounts in Australian dollars. Every figure comes from certified views; no AI computes them.</p>
@@ -218,7 +218,7 @@ function renderExecSummary(s, o) {
       pct(s.FCR_Rate), 'resolved first time', 'brand'],
     ['ch4', 'Where the money is', `${money(s.Overdue_Balance)} overdue across ${count(s.Overdue_Accounts)} accounts${biggest ? `; the most, ${money(biggest.Overdue_Balance)} (${pct(biggest.Balance_Share, 0)}), is ${hEsc(biggest.DPD_Bucket)} days past due` : ''}.`,
       money(s.Overdue_Balance), 'overdue', 'brand'],
-    ['ch5', 'Scenarios', `${count(sc(1).Accounts)} upgrade-but-overdue, ${count(sc(3).Accounts)} chronic late payers at renewal and ${count(sc(6).Accounts)} repeat callers after an unresolved call.`,
+    ['ch5', 'Scenarios', `${count(sc(1).Accounts)} upgrade-but-overdue, ${count(sc(2).Accounts)} chronic late payers at renewal and ${count(sc(5).Accounts)} repeat callers after an unresolved call.`,
       count(largest && largest.Accounts), largest ? largest.Scenario_Name.toLowerCase() : '', 'good'],
   ];
   document.getElementById('execSumList').innerHTML = rows.map(([id, label, line, fig, figLabel, tone], i) => `
@@ -229,16 +229,13 @@ function renderExecSummary(s, o) {
     </a></li>`).join('');
 }
 
-/** Optus does not use credit score, so it is left out of every insight (the data keeps it). */
-const HIDDEN_FACTORS = new Set(['Credit score']);
-/** Scenario 2 (porting out with a credit score below 550) is left out for the same reason. */
-const shownScenarios = o => (o.scenarios || []).filter(r => String(r.Scenario_ID) !== '2');
+/** The account scenarios: 1, 2 and 5 (3 and 4 are the contact-centre patterns of chapter 3). */
+const shownScenarios = o => o.scenarios || [];
 
 /** Factors grouped from qry_ptp_break_drivers: segments, spread, strength, highest and lowest segment. */
 function factorsOf(drivers) {
   const m = new Map();
   for (const r of drivers || []) {
-    if (HIDDEN_FACTORS.has(r.Factor)) continue;
     if (!m.has(r.Factor)) m.set(r.Factor, { factor: r.Factor, order: num(r.Factor_Order), rows: [], spread: num(r.Factor_Spread_Pts), strength: r.Factor_Strength });
     m.get(r.Factor).rows.push(r);
   }
@@ -291,7 +288,7 @@ function renderDrivers(s, o) {
       <div class="card-btns">${f.hi ? viewBtn('segment_broken', `View ${f.hi.Segment}`, `${f.factor}|${f.hi.Segment}`, `Broken promises: ${f.factor.toLowerCase()} ${f.hi.Segment}, 12 months`, true) : ''}</div></div>`).join('') || '<div class="empty-note">Every factor makes a clear difference.</div>'}</div>`);
 }
 
-/** 3. How is the contact centre doing, and what does it do to promises? (Scenarios 4, 5 and 6.) */
+/** 3. How is the contact centre doing, and what does it do to promises? (Scenarios 3, 4 and 5.) */
 function renderContact(s, o) {
   const month = monthLabel(s.as_of);
   const fcr = outcomeRow(o, 'Resolved first time'), xfer = outcomeRow(o, 'Transferred'), unres = outcomeRow(o, 'Not resolved, not transferred');
@@ -316,11 +313,11 @@ function renderContact(s, o) {
       viewBtn('contacted', 'View accounts', '', `Contacted customers, ${month}`, true)),
   ].join('');
 
-  // Scenario 4: the call outcome against promises.
+  // Scenario 3: the call outcome against promises.
   const outcomes = o.callOutcomes || [];
   const maxB = Math.max(...outcomes.map(r => num(r.Broken_Rate) || 0), 0.01) * 1.08;
   const overall = num((o.drivers || [])[0]?.Overall_Broken_Rate);
-  panel('pnlFcr', 'Scenario 4 · Resolved first time, kept more often', 'Promises broken by how that month\'s call went, 12 months',
+  panel('pnlFcr', 'Scenario 3 · Resolved first time, kept more often', 'Promises broken by how that month\'s call went, 12 months',
     { q: 'Compare promise-kept rates between calls resolved first time and transferred calls, and what that means for the contact centre.', mode: 'agent' },
     outcomes.map(r => bar(hEsc(r.Call_Outcome), num(r.Broken_Rate), maxB, pct(r.Broken_Rate),
       r.Call_Outcome === 'Resolved first time' ? 'good' : r.Call_Outcome === 'No contact' ? 'brand' : 'bad',
@@ -329,7 +326,7 @@ function renderContact(s, o) {
       overall, `Overall ${pct(overall)}`)).join('') +
     `<div class="panel-note">Each bar: the share of promises that broke, by how that month's call went; the line is the overall rate. "No contact" means no contact-centre contact was recorded that month; these promises were made another way (app, SMS, IVR, online, store), and the data doesn't say which. Observed, not a controlled experiment.</div>`);
 
-  // Scenario 5: transfers and handle time.
+  // Scenario 4: transfers and handle time.
   const nonXfer = outcomes.filter(r => r.Call_Outcome === 'Resolved first time' || r.Call_Outcome === 'Not resolved, not transferred');
   const w = nonXfer.reduce((a, r) => a + num(r.Account_Months), 0);
   const ahtOther = w ? nonXfer.reduce((a, r) => a + num(r.Avg_Handle_Seconds) * num(r.Account_Months), 0) / w : null;
@@ -338,19 +335,19 @@ function renderContact(s, o) {
   const cost = states.reduce((a, r) => a + (num(r.Transferred_Handle_Cost) || 0), 0);
   const hasCost = states.some(r => num(r.Transferred_Handle_Cost) !== null);
   const maxT = Math.max(...states.map(r => num(r.Transfer_Rate) || 0), 0.01) * 1.08;
-  panel('pnlTransfer', 'Scenario 5 · Transfers take longer', `A transferred call averages <b>${secs(xfer.Avg_Handle_Seconds)}</b> against ${secs(ahtOther)} for the rest: <b>${count(xferHours)}</b> hours of handle time on transferred calls over 12 months${hasCost ? ` (${money(cost)})` : ''}.`,
+  panel('pnlTransfer', 'Scenario 4 · Transfers take longer', `A transferred call averages <b>${secs(xfer.Avg_Handle_Seconds)}</b> against ${secs(ahtOther)} for the rest: <b>${count(xferHours)}</b> hours of handle time on transferred calls over 12 months${hasCost ? ` (${money(cost)})` : ''}.`,
     { q: 'Which states and products have the most transfers and the longest handle times?', mode: 'chat' },
     states.map(r => bar(hEsc(r.State), num(r.Transfer_Rate), maxT, pct(r.Transfer_Rate), 'warn',
       `${count(r.Transfers)} of ${count(r.Contacts)} calls · ${count(r.Transferred_Handle_Hours)} hours ` +
       viewBtn('transferred_state', 'View', r.State, `Transferred calls in ${r.State}, 12 months`, true))).join('') +
     `<div class="panel-note">Each bar: transferred calls ÷ contacted customers in that state, 12 months (one contact per account per month); the hours are the handle time of the transferred calls. ${hasCost ? 'Cost uses the handle_cost_per_minute business rule.' : 'Shown in hours: no cost per minute of handle time has been supplied, so no dollar cost is shown.'} Transfer rates differ little by state.</div>`);
 
-  // Scenario 6: repeat calls by last month's outcome.
+  // Scenario 5: repeat calls by last month's outcome.
   const rep = o.repeat || [];
   const maxR = Math.max(...rep.map(r => num(r.Repeat_Rate) || 0), 0.01) * 1.08;
   const bad = rep.find(r => r.Prior_Month_Outcome === 'Not resolved last month') || {};
   const good = rep.find(r => r.Prior_Month_Outcome === 'Resolved first time last month') || {};
-  panel('pnlRepeat', 'Scenario 6 · Unresolved calls come back', `Customers whose call last month was not resolved called again <b>${pct(bad.Repeat_Rate)}</b> of the time, against ${pct(good.Repeat_Rate)} after a first-time resolution.`,
+  panel('pnlRepeat', 'Scenario 5 · Unresolved calls come back', `Customers whose call last month was not resolved called again <b>${pct(bad.Repeat_Rate)}</b> of the time, against ${pct(good.Repeat_Rate)} after a first-time resolution.`,
     { q: 'Which customers called again after an unresolved call this month, and what do they have in common?', mode: 'agent' },
     rep.map(r => bar(hEsc(REPEAT_GROUP[r.Prior_Month_Outcome] || r.Prior_Month_Outcome), num(r.Repeat_Rate), maxR, pct(r.Repeat_Rate),
       r.Prior_Month_Outcome === 'Not resolved last month' ? 'bad' : r.Prior_Month_Outcome === 'Resolved first time last month' ? 'good' : 'brand',
@@ -359,7 +356,7 @@ function renderContact(s, o) {
     `<div class="panel-note">Each bar: the share of customers contacted this month who called again within about 7 to 14 days, grouped by how their call went the month before (12 months). "Not resolved" includes transferred calls. November 2025 is the first month in the data, so it has no month before.</div>`);
 }
 
-/** Scenario 6's groups in words: "not resolved" covers transferred calls too. */
+/** Scenario 5's groups in words: "not resolved" covers transferred calls too. */
 const REPEAT_GROUP = {
   'Resolved first time last month': 'Resolved first time last month',
   'Not resolved last month': 'Not resolved last month (incl. transferred)',
@@ -430,8 +427,8 @@ function renderScenarios(s, o) {
     `The largest is <b>${count(Math.max(...scen.map(x => num(x.Accounts) || 0), 0))}</b> accounts; an account can be in more than one.`);
   const asks = {
     1: `Which customers are interested in a new product but more than ${r('s1_min_dpd', 30)} days overdue, and how should we approach them?`,
-    3: `For customers with ${r('s3_min_missed_payments', 2)}+ missed payments entering renewal, what % broke their last promise to pay?`,
-    6: 'Which customers called again after an unresolved call this month?',
+    2: `For customers with ${r('s2_min_missed_payments', 2)}+ missed payments entering renewal, what % broke their last promise to pay?`,
+    5: 'Which customers called again after an unresolved call this month?',
   };
   const accountCard = id => {
     const x = sc(id);
@@ -445,14 +442,14 @@ function renderScenarios(s, o) {
       <div class="scen-v">${value}<small>${hEsc(unit)}</small></div><div class="scen-d">${desc}</div>
       <div class="card-btns"><a class="view-btn" href="#ch3">See chapter 3</a>${askBtn(q, 'agent')}</div></div>`;
   document.getElementById('scenarios').innerHTML = [
-    accountCard(1), accountCard(3),
-    patternCard(4, 'Contact Center Efficiency vs Collections', pct(xfer.Broken_Rate), 'broken after a transfer',
+    accountCard(1), accountCard(2),
+    patternCard(3, 'Contact Center Efficiency vs Collections', pct(xfer.Broken_Rate), 'broken after a transfer',
       `Against ${pct(fcr.Broken_Rate)} after a first-time resolution: promises made after a transfer break more often (12 months).`,
       'Compare FCR rates against promise-kept rates: does agent quality drive recovery?'),
-    patternCard(5, 'Transfer-Driven Cost Leakage', count(xferHours), 'hours on transferred calls',
+    patternCard(4, 'Transfer-Driven Cost Leakage', count(xferHours), 'hours on transferred calls',
       `Transferred calls average ${secs(xfer.Avg_Handle_Seconds)}; shown in hours because no cost per minute has been supplied.`,
       'Which states and products combine high transfer rates with long handle times, and where is the training opportunity?'),
-    accountCard(6),
+    accountCard(5),
   ].join('');
 }
 
@@ -484,7 +481,7 @@ const LIST_RULES = {
   unresolved: 'Contacted in the latest month and not resolved on the first call.',
   transferred: 'Contacted in the latest month and transferred.',
   repeat: 'Called again within about 7 to 14 days, latest month.',
-  repeat_unresolved: 'Called again this month after a call last month that was not resolved first time (Scenario 6).',
+  repeat_unresolved: 'Called again this month after a call last month that was not resolved first time (Scenario 5).',
   scenario: 'Accounts in this scenario at the latest snapshot, using the thresholds in the business rules.',
   top_broken: 'Broken promises in the latest month, largest outstanding balance first.',
   segment_broken: 'Broken promises in this segment over 12 months (one row per account per month).',

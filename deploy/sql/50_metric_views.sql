@@ -18,9 +18,6 @@ fields:
   - name: Product_Type
     expr: source.Product_Type
     synonyms: [product, plan, service, postpaid, prepaid, NBN, broadband, 5G, home internet, SMB]
-  - name: Credit_Band
-    expr: "CASE WHEN source.Credit_Score < {{rule:s2_credit_below}} THEN 'Below {{rule:s2_credit_below}}' WHEN source.Credit_Score < {{rule:credit_band_2_below}} THEN '{{rule:s2_credit_below}}-{{rule:credit_band_2_below-1}}' WHEN source.Credit_Score < {{rule:credit_band_3_below}} THEN '{{rule:credit_band_2_below}}-{{rule:credit_band_3_below-1}}' ELSE '{{rule:credit_band_3_below}}+' END"
-    synonyms: [credit score band, credit rating, credit risk]
   - name: DPD_Bucket
     expr: "CASE WHEN source.Days_Past_Due = 0 THEN 'Current' WHEN source.Days_Past_Due <= {{rule:dpd_bucket_1_max}} THEN '1-{{rule:dpd_bucket_1_max}}' WHEN source.Days_Past_Due <= {{rule:dpd_bucket_2_max}} THEN '{{rule:dpd_bucket_1_max+1}}-{{rule:dpd_bucket_2_max}}' WHEN source.Days_Past_Due <= {{rule:dpd_bucket_3_max}} THEN '{{rule:dpd_bucket_2_max+1}}-{{rule:dpd_bucket_3_max}}' ELSE '{{rule:dpd_bucket_3_max+1}}+' END"
     synonyms: [days past due bucket, arrears stage, delinquency bucket, aging band, DPD]
@@ -113,9 +110,6 @@ measures:
     expr: SUM(CASE WHEN source.Contacted_Flag = 1 THEN source.PTP_Flag ELSE 0 END) / NULLIF(SUM(source.Contacted_Flag), 0)
     comment: "Promises made in contacted account-months / contacted account-months"
     synonyms: [PTP conversion, promise rate per contact]
-  - name: avg_credit_score
-    expr: AVG(source.Credit_Score)
-    comment: "Average credit score"
   - name: avg_days_past_due
     expr: AVG(CASE WHEN source.Days_Past_Due > 0 THEN source.Days_Past_Due END)
     comment: "Average days past due, overdue accounts"

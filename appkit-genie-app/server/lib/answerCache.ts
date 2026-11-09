@@ -162,7 +162,7 @@ const OUTCOMES = ['resolved first time', 'fcr', 'first call resolution', 'first 
   'repeat', 'repeats', 'repeat calls', 'no contact', 'unresolved', 'porting out', 'outbound', 'inbound', 'renewal', 'new product', 'upgrade'];
 const DIMENSIONS: Record<string, RegExp> = {
   product: /\bproducts?\b|\bplans?\b/, state: /\bstates?\b|\bterritor/, bucket: /\bbuckets?\b|\bdpd\b|\bdays past due\b|\boverdue\b/,
-  credit: /\bcredit\b/, outcome: /\bfcr\b|\bresol|\btransfer|\brepeat|\bcall outcome/, month: /\bmonths?\b|\bmonthly\b|\btrend/,
+  outcome: /\bfcr\b|\bresol|\btransfer|\brepeat|\bcall outcome/, month: /\bmonths?\b|\bmonthly\b|\btrend/,
   scenario: /\bscenarios?\b/, segment: /\bsegments?\b/, missed: /\bmissed payments?\b/, handle: /\bhandle time\b|\baht\b/,
   account: /\baccounts?\b/, driver: /\bdrivers?\b|\breasons?\b|\bwhy\b/,
 };

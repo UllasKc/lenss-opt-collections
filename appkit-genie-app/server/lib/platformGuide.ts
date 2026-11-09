@@ -24,9 +24,9 @@ The answers come from the **LensS Intelligence Engine**, which turns a question 
 - **1 · Promises (the top banner):** the latest month's promises to pay, how many were kept and broken and their amounts, against the 12-month rate; four tiles: overdue balance, promises broken, resolved first time (FCR) and customers who called again after an unresolved call.
 - **Executive summary:** "The month in 30 seconds", five lines (one per chapter) and a bottom line; each line jumps to its chapter.
 - **2 · Why promises break:** a card per factor that makes a clear difference (call outcome, missed payments…), with the broken rate of each segment against the overall rate, and the factors that make little difference (product, state, porting, renewal window, new product interest) grouped together.
-- **3 · Contact centre:** FCR, transfers, repeat calls and average handle time (latest month, last month and 12 months), then Scenario 4 (promises broken by call outcome), Scenario 5 (transfers and handle time by state) and Scenario 6 (repeat calls after an unresolved call).
+- **3 · Contact centre:** FCR, transfers, repeat calls and average handle time (latest month, last month and 12 months), then Scenario 3 (promises broken by call outcome), Scenario 4 (transfers and handle time by state) and Scenario 5 (repeat calls after an unresolved call).
 - **4 · Where the money is:** the overdue balance by days-past-due bucket, and a 12-month trend chart (switch between overdue balance, broken rate, amount promised, FCR, transfers and repeat calls).
-- **5 · Scenarios:** a card for each of Optus's Scenario Guide scenarios used here (1, 3, 4, 5 and 6), and the broken promises with the most at stake.
+- **5 · Scenarios:** a card for each of the five scenarios (1 to 5) from Optus's Scenario Guide, and the broken promises with the most at stake.
 - **View accounts** (or **View**) on any figure opens the accounts behind it, with **Export CSV**. **KPI definitions** (in the banner and at the bottom) explain every figure.
 Every panel has an **Ask LensS** button; hover over it to see the exact question it will ask.`,
   },

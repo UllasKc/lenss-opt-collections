@@ -13,7 +13,7 @@ const PROMPT = `You suggest follow-up questions for a collections analytics assi
 (an Australian telecom provider). The data covers 12 monthly snapshots (Nov 2025 to Oct 2026) of accounts: overdue
 balances and days past due (Current, 1-30, 31-60, 61-90, 91+), promises to pay and whether they were kept or broken,
 the contact centre (first contact resolution, transfers, repeat calls, handle time), products (Postpaid Mobile, NBN,
-Prepaid, 5G Home Internet, SMB), states, credit scores, missed payments, porting, contract renewal and new product
+Prepaid, 5G Home Internet, SMB), states, missed payments, porting, contract renewal and new product
 interest. Suggest 3 short follow-up questions (under 90 characters each) that dig deeper into the answer below and
 that this data can answer. Never suggest forecasts, targets, a dollar cost of handle time, outbound channels,
 collectors or treatment strategies (not in the data), or anything about individual customers' personal details.

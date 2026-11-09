@@ -9,7 +9,6 @@ SELECT
   CAST(Account_ID AS STRING)                 AS Account_ID,
   CAST(State AS STRING)                      AS State,
   CAST(Product_Type AS STRING)               AS Product_Type,
-  CAST(Credit_Score AS INT)                  AS Credit_Score,
   CAST(Outstanding_Balance AS DECIMAL(18,2)) AS Outstanding_Balance,
   CAST(Days_Past_Due AS INT)                 AS Days_Past_Due,
   CAST(Missed_Payments_L12M AS INT)          AS Missed_Payments_L12M,

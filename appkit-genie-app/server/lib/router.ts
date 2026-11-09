@@ -99,7 +99,7 @@ export interface ModelReading { destination: Destination; depth: Mode; intent: I
 
 const PROMPT = `You are the router of LensS Collections Intelligence for Optus, an analytics assistant over an Australian
 telecom provider's collections data (overdue accounts and balances, days past due, promises to pay and why they break,
-first contact resolution, transfers, repeat calls, handle time, products, states, credit scores, scenarios).
+first contact resolution, transfers, repeat calls, handle time, products, states, scenarios).
 For the user's latest message, decide:
 
 destination:

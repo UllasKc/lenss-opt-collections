@@ -275,25 +275,25 @@ def main():
 
     def overview():
         o = overview_()
-        want = {"trend": 12, "callOutcomes": 4, "transferByState": 8, "repeat": 4, "scenarios": 4, "exposure": 4, "topBroken": 8}
+        want = {"trend": 12, "callOutcomes": 4, "transferByState": 8, "repeat": 4, "scenarios": 3, "exposure": 4, "topBroken": 8}
         off = [f"{k} {len(o.get(k) or [])} rows (want {v})" for k, v in want.items() if len(o.get(k) or []) != v]
         empty = [k for k in ("drivers", "contactBySegment") if not o.get(k)]
         if off or empty:
             raise RuntimeError("; ".join(off + [f"{k} empty" for k in empty]))
         factors = {r["Factor"] for r in o["drivers"]}
-        return f"12 months, {len(factors)} driver factors, 4 call outcomes, 8 states, 4 scenarios, 4 DPD buckets, top 8 broken"
+        return f"12 months, {len(factors)} driver factors, 4 call outcomes, 8 states, 3 scenarios, 4 DPD buckets, top 8 broken"
     check("B3", "Every Command Center panel has data", overview)
 
     def rules():
         r = summary_().get("rules") or {}
-        names = ["s1_min_dpd", "s2_credit_below", "s3_min_missed_payments", "min_segment_promises", "driver_spread_pts", "top_accounts"]
+        names = ["s1_min_dpd", "s2_min_missed_payments", "min_segment_promises", "driver_spread_pts", "top_accounts"]
         missing = [n for n in names if num(r.get(n)) is None]
         if missing:
             raise RuntimeError(f"rules missing from the summary: {missing}")
         strong = sorted({d["Factor"] for d in overview_()["drivers"] if d["Factor_Strength"] == "Clear difference"})
         msg = ", ".join(f"{n} {r[n]}" for n in names) + f"; clear-difference factors: {strong}"
-        if set(strong) != {"Call outcome", "Credit score", "Missed payments (last 12 months)"}:
-            raise Warn(f"expected call outcome, credit score and missed payments as the clear drivers (source data): {msg}")
+        if set(strong) != {"Call outcome", "Missed payments (last 12 months)"}:
+            raise Warn(f"expected call outcome and missed payments as the clear drivers (source data): {msg}")
         return msg
     check("B4", "Business rules reach the app, and the drivers follow them", rules)
 
@@ -323,7 +323,7 @@ def main():
     def segment_lists():
         s, o = summary_(), overview_()
         done, bad = [], []
-        for factor in ("Call outcome", "Credit score", "State"):
+        for factor in ("Call outcome", "Missed payments (last 12 months)", "State"):
             segs = [d for d in o["drivers"] if d["Factor"] == factor]
             total = 0
             for d in segs:
@@ -380,7 +380,7 @@ def main():
     def explorer_options():
         o = getj("/api/explorer/options")
         ctx["xo"] = o
-        want = {"month": 12, "product": 5, "state": 8, "credit": 4, "bucket": 5, "outcome": 4, "porting": 3, "renewal": 2, "interest": 2}
+        want = {"month": 12, "product": 5, "state": 8, "bucket": 5, "outcome": 4, "porting": 3, "renewal": 2, "interest": 2}
         off = [f"{k} {len(o['dims'].get(k) or [])} (want {v})" for k, v in want.items() if len(o["dims"].get(k) or []) != v]
         if not o["dims"].get("missed"):
             off.append("no missed-payment bands")
@@ -531,7 +531,6 @@ def main():
         s0, o0 = summary_(), overview_()
         states = sorted([d for d in o0["drivers"] if d["Factor"] == "State"], key=lambda d: -num(d["Broken_Rate"]))
         top_state = states[0]["Segment"]
-        credit = {d["Segment"]: d for d in o0["drivers"] if d["Factor"] == "Credit score"}
         products = sorted([d for d in o0["contactBySegment"] if d["Dimension"] == "Product"], key=lambda d: num(d["FCR_Rate"]))
         low_fcr = products[0]["Segment"]
         oc = {r["Call_Outcome"]: r for r in o0["callOutcomes"]}
@@ -549,10 +548,10 @@ def main():
         check("E3", "Top 100 accounts by outstanding balance where the PTP was broken last month", key_question(
             "Show me the top 100 accounts by outstanding balance where the PTP was broken last month.",
             lambda a: None if (top_acct and top_acct in a["text"]) or any(len(c["rows"]) >= 50 for c in a["charts"]) else f"expected {top_acct} or a list of ~100"))
-        check("E4", "% of PTPs kept vs broken by credit score band", key_question(
+        check("E4", "Credit score: says the data has none", key_question(
             "What percentage of PTPs are kept vs broken, segmented by credit score bands?",
-            lambda a: None if "550" in a["text"] and pct_in(a, credit["Below 550"]["Broken_Rate"]) else
-            f"expected 'Below 550' at {num(credit['Below 550']['Broken_Rate']):.1%} broken"))
+            lambda a: None if re.search(r"credit", a["text"], re.I) and re.search(r"not (in|available|include|part)|unavailable|no credit|doesn'?t (have|hold|contain|include)", a["text"].replace("\u2019", "'"), re.I)
+            else "expected a plain 'no credit score in this data'"))
         check("E5", "Which product types have the lowest First Call Resolution rate?", key_question(
             "Which product types have the lowest First Call Resolution rate?",
             lambda a: None if has(a, low_fcr) else f"expected {low_fcr} lowest"))
@@ -569,9 +568,9 @@ def main():
         check("E9", "New product interest and 30+ days past due: how many, and their balance?", key_question(
             "How many customers have New_Product_Interest=Y but are 30+ days past due? What is their total balance?",
             lambda a: None if f"{num(s1['Accounts']):.0f}" in a["text"] else f"expected {num(s1['Accounts']):.0f} accounts (scenario 1)"))
-        check("E10", "Porting out: average outstanding balance and credit score", key_question(
-            "For customers with Porting_Status=Outbound, what is the average outstanding balance and credit score?",
-            lambda a: None if has(a, "credit") and "$" in a["text"] else "no average balance or credit score"))
+        check("E10", "Porting out: average outstanding balance", key_question(
+            "For customers with Porting_Status=Outbound, what is the average outstanding balance and days past due?",
+            lambda a: None if "$" in a["text"] else "no average balance"))
         check("E11", "% of contacted accounts with a PTP, FCR vs non-FCR", key_question(
             "What % of contacted accounts result in a PTP, broken out by FCR vs non-FCR calls?",
             lambda a: None if pct_in(a, oc["Resolved first time"]["Promise_Rate"]) else
@@ -587,9 +586,9 @@ def main():
                 a = ask("Why are promises to pay breaking, and what should we do about it?", "agent")
                 need_ok(a, "deep analysis")
                 steps = len(a["answer"].get("steps") or [])
-                named = has(a, "credit") and (has(a, "transfer") or has(a, "first"))
+                named = has(a, "missed") and (has(a, "transfer") or has(a, "first"))
                 if not a["charts"] or not named:
-                    raise Warn(f"{a['secs']}s, {len(a['charts'])} chart(s), {steps} steps, names credit score and call outcome: {named} | {preview(a)}")
+                    raise Warn(f"{a['secs']}s, {len(a['charts'])} chart(s), {steps} steps, names missed payments and call outcome: {named} | {preview(a)}")
                 return f"{a['secs']}s, {len(a['charts'])} chart(s), {steps} steps: {preview(a)}"
             check("E13", "[deep] Why are promises to pay breaking, and what should we do?", deep)
 

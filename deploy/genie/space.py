@@ -10,7 +10,7 @@ hitting them, none documented in the CLI help):
   - every benchmark needs >= 1 answer; answer format enum is the bare "SQL"
 
 The instructions quote thresholds from gold.business_rules_config, never typed in:
-{{rule:x}} is the value (550), {{pct:x}} a share as a percentage (0.05 -> 5%) and
+{{rule:x}} is the value (30), {{pct:x}} a share as a percentage (0.05 -> 5%) and
 {{pts:x}} a share as points (0.05 -> 5 points). A missing rule stops the deploy.
 """
 import re
@@ -63,8 +63,7 @@ CALCULATION RULES
   transferred call is never FCR. Repeat_Call_Flag means the customer called again within about
   7 to 14 days (Optus's flag; there are no call dates).
 - Call_Outcome is one of: Resolved first time, Transferred, Not resolved, not transferred, No contact.
-- Bands come from business_rules_config: credit score Below {{rule:s2_credit_below}}, {{rule:s2_credit_below}}-{{rule:credit_band_2_below-1}},
-  {{rule:credit_band_2_below}}-{{rule:credit_band_3_below-1}}, {{rule:credit_band_3_below}}+; days past due Current, 1-{{rule:dpd_bucket_1_max}}, {{rule:dpd_bucket_1_max+1}}-{{rule:dpd_bucket_2_max}},
+- Bands come from business_rules_config: days past due Current, 1-{{rule:dpd_bucket_1_max}}, {{rule:dpd_bucket_1_max+1}}-{{rule:dpd_bucket_2_max}},
   {{rule:dpd_bucket_2_max+1}}-{{rule:dpd_bucket_3_max}}, {{rule:dpd_bucket_3_max+1}}+; missed payments 0, 1, 2, 3, {{rule:missed_payments_top_band}}+.
 - Rank a segment on its broken-promise rate only with at least {{rule:min_segment_promises}} promises (Meets_Min_Volume = 1).
 - A factor "makes a clear difference" to promises breaking when its segments' broken rates are at
@@ -73,24 +72,24 @@ CALCULATION RULES
 
 SCENARIOS (Optus's Scenario Guide; thresholds from business_rules_config)
 1. Upgrade-but-Overdue: New_Product_Interest_Flag = 1 AND Days_Past_Due > {{rule:s1_min_dpd}} (Scenario_1_Flag).
-2. High-Risk Porting Out: Porting_Status = 'Outbound' AND Credit_Score < {{rule:s2_credit_below}} (Scenario_2_Flag).
-3. Churn Risk at Renewal: Missed_Payments_L12M >= {{rule:s3_min_missed_payments}} AND Contract_Renewal_Window_Flag = 1 (Scenario_3_Flag).
-4. Contact Center Efficiency vs Collections: promise-kept rate by call outcome (qry_fcr_vs_promises).
-5. Transfer-Driven Cost Leakage: transfers and handle time by state and product (qry_transfer_cost).
-6. Repeat Caller Frustration: Repeat_Call_Flag = 1 after a call last month not resolved first time
+2. Churn Risk at Renewal: Missed_Payments_L12M >= {{rule:s2_min_missed_payments}} AND Contract_Renewal_Window_Flag = 1 (Scenario_2_Flag).
+3. Contact Center Efficiency vs Collections: promise-kept rate by call outcome (qry_fcr_vs_promises).
+4. Transfer-Driven Cost Leakage: transfers and handle time by state and product (qry_transfer_cost).
+5. Repeat Caller Frustration: Repeat_Call_Flag = 1 after a call last month not resolved first time
    (Repeat_After_Unresolved_Flag; rates in qry_repeat_after_unresolved).
+There are five scenarios, numbered 1 to 5 (the Scenario Guide's credit-score scenario is not used: this data has no credit score).
 Scenario counts are at the latest snapshot unless asked otherwise (qry_scenario_summary).
 
 WHICH VIEW ANSWERS WHICH QUESTION (prefer these; each view's description says more)
 - Headline for the latest month, the month before and the 12 months: qry_cc_kpis.
 - Month-by-month trend of balances, promises, broken rate, FCR, transfers, repeats, handle time:
   qry_monthly_trend. By product or state per month: mv_collections GROUP BY Snapshot_Date and the dimension.
-- Why promises break (call outcome, credit score, missed payments, days past due, lead time,
+- Why promises break (call outcome, missed payments, days past due, lead time,
   porting, renewal window, new product interest, product, state): qry_ptp_break_drivers.
-- Call outcome against promises (scenario 4, FCR vs kept rate, PTP per contact): qry_fcr_vs_promises.
-- FCR, transfers, repeats and handle time by product, state, credit band or days past due:
-  qry_contact_by_segment. By state and product together (scenario 5): qry_transfer_cost.
-- Repeat calls after an unresolved call (scenario 6): qry_repeat_after_unresolved.
+- Call outcome against promises (scenario 3, FCR vs kept rate, PTP per contact): qry_fcr_vs_promises.
+- FCR, transfers, repeats and handle time by product, state or days past due:
+  qry_contact_by_segment. By state and product together (scenario 4): qry_transfer_cost.
+- Repeat calls after an unresolved call (scenario 5): qry_repeat_after_unresolved.
 - Scenario sizes: qry_scenario_summary; their accounts: qry_scenario_accounts.
 - Overdue balance by days-past-due bucket, promised share of balance: qry_dpd_exposure.
 - Broken promises with the most at stake in the latest month: qry_cc_top_broken_accounts.
@@ -105,6 +104,7 @@ WHAT YOU MUST NOT DO
   has a value; otherwise give seconds, minutes or hours and say no cost rate has been supplied.
 - Never claim a cause: every comparison here is observed, not a controlled experiment. Say
   "promises made after a transferred call broke more often", not "transfers cause broken promises".
+- The data has no credit score: Optus does not use one. Say so if asked.
 - The data has no outbound attempts, channels, collectors, agents or treatment strategies, and
   does not say how promises without a contact were made. Say so rather than guessing.
 - Never return customer names, phone numbers, emails or addresses: this data has none. When
@@ -132,9 +132,7 @@ def examples(g: str):
         ("Which Australian states have the highest broken-PTP rate?",
          f"SELECT Segment AS State, Promises, Broken_Promises, Broken_Rate, Difference_vs_Overall FROM {g}.qry_ptp_break_drivers WHERE Factor = 'State' AND Meets_Min_Volume = 1 ORDER BY Broken_Rate DESC;"),
         ("Show me the top 100 accounts by outstanding balance where the PTP was broken last month.",
-         f"SELECT Account_ID, State, Product_Type, Outstanding_Balance, Days_Past_Due, PTP_Amount, PTP_Due_Date, Credit_Score, Call_Outcome FROM {g}.qry_cc_top_broken_accounts ORDER BY Outstanding_Balance DESC;"),
-        ("What percentage of PTPs are kept vs broken, segmented by credit score bands?",
-         f"SELECT Segment AS Credit_Band, Promises, Kept_Promises, Broken_Promises, Kept_Rate, Broken_Rate FROM {g}.qry_ptp_break_drivers WHERE Factor = 'Credit score' ORDER BY Segment_Order;"),
+         f"SELECT Account_ID, State, Product_Type, Outstanding_Balance, Days_Past_Due, PTP_Amount, PTP_Due_Date, Call_Outcome FROM {g}.qry_cc_top_broken_accounts ORDER BY Outstanding_Balance DESC;"),
         ("Which product types have the lowest First Call Resolution rate?",
          f"SELECT Segment AS Product_Type, Contacts, FCR_Rate, Transfer_Rate, Repeat_Rate FROM {g}.qry_contact_by_segment WHERE Dimension = 'Product' ORDER BY FCR_Rate;"),
         ("Compare PTP-kept rates between accounts resolved on first call (FCR=Y) vs transferred calls.",
@@ -145,8 +143,6 @@ def examples(g: str):
          f"SELECT Account_ID, MAX(State) AS State, MAX(Product_Type) AS Product_Type, MAX(Repeat_Run_Months) AS Longest_Repeat_Run_Months, MAX(CASE WHEN Is_Latest_Snapshot = 1 THEN Outstanding_Balance END) AS Latest_Balance FROM {g}.qry_account_month WHERE Repeat_Streak_Flag = 1 AND Contract_Renewal_Window_Flag = 1 GROUP BY Account_ID ORDER BY Longest_Repeat_Run_Months DESC, Latest_Balance DESC;"),
         ("How many customers have New_Product_Interest=Y but are 30+ days past due? What is their total balance?",
          f"SELECT Accounts, Total_Balance, Overdue_Balance, Filter_Logic FROM {g}.qry_scenario_summary WHERE Scenario_ID = 1;"),
-        ("For customers with Porting_Status=Outbound, what is the average outstanding balance and credit score?",
-         f"SELECT COUNT(DISTINCT Account_ID) AS Accounts, AVG(Outstanding_Balance) AS Avg_Outstanding_Balance, AVG(Credit_Score) AS Avg_Credit_Score FROM {g}.qry_account_month WHERE Is_Latest_Snapshot = 1 AND Porting_Status = 'Outbound';"),
         ("What % of contacted accounts result in a PTP, broken out by FCR vs non-FCR calls?",
          f"SELECT CASE WHEN FCR_Flag = 1 THEN 'Resolved first time (FCR)' ELSE 'Not resolved first time' END AS Call, COUNT(*) AS Contacts, SUM(PTP_Flag) AS Promises, 1.0*SUM(PTP_Flag)/COUNT(*) AS Promise_Rate FROM {g}.qry_account_month WHERE Contacted_Flag = 1 GROUP BY 1;"),
         ("What is the total call-handle-time cost (seconds) for accounts that ultimately broke their PTP?",
@@ -156,10 +152,8 @@ def examples(g: str):
          f"SELECT Snapshot_Date, Promises, Broken_Promises, Broken_Rate, Broken_Amount FROM {g}.qry_monthly_trend ORDER BY Snapshot_Date;"),
         ("Show accounts with New_Product_Interest = Y and overdue, by state",
          f"SELECT State, COUNT(*) AS Accounts, SUM(Outstanding_Balance) AS Total_Balance FROM {g}.qry_scenario_accounts WHERE Scenario_ID = 1 GROUP BY State ORDER BY Accounts DESC;"),
-        ("List customers porting out with Credit_Score < 550, ranked by Outstanding_Balance",
-         f"SELECT Account_ID, State, Product_Type, Credit_Score, Outstanding_Balance, Days_Past_Due FROM {g}.qry_scenario_accounts WHERE Scenario_ID = 2 ORDER BY Outstanding_Balance DESC;"),
         ("For customers with 2+ missed payments entering renewal, what % broke their last PTP?",
-         f"SELECT COUNT(*) AS Accounts_With_A_Promise, SUM(Broken_PTP_Flag) AS Broken, 1.0*SUM(Broken_PTP_Flag)/COUNT(*) AS Broken_Rate FROM (SELECT Account_ID, Broken_PTP_Flag, ROW_NUMBER() OVER (PARTITION BY Account_ID ORDER BY Snapshot_Date DESC) AS rn FROM {g}.qry_account_month WHERE PTP_Flag = 1 AND Account_ID IN (SELECT Account_ID FROM {g}.qry_scenario_accounts WHERE Scenario_ID = 3)) WHERE rn = 1;"),
+         f"SELECT COUNT(*) AS Accounts_With_A_Promise, SUM(Broken_PTP_Flag) AS Broken, 1.0*SUM(Broken_PTP_Flag)/COUNT(*) AS Broken_Rate FROM (SELECT Account_ID, Broken_PTP_Flag, ROW_NUMBER() OVER (PARTITION BY Account_ID ORDER BY Snapshot_Date DESC) AS rn FROM {g}.qry_account_month WHERE PTP_Flag = 1 AND Account_ID IN (SELECT Account_ID FROM {g}.qry_scenario_accounts WHERE Scenario_ID = 2)) WHERE rn = 1;"),
         ("Average PTP_Amount as a % of Outstanding_Balance, by Days_Past_Due bucket",
          f"SELECT DPD_Bucket, Promises, Promised_Amount, Promised_Share_Of_Balance FROM {g}.qry_dpd_exposure ORDER BY DPD_Bucket_Order;"),
         ("Which PTP due-date lead time correlates with the highest honour rate?",
@@ -176,23 +170,23 @@ def examples(g: str):
         ("How often do customers call again after an unresolved call?",
          f"SELECT Prior_Month_Outcome, Contacts, Repeat_Calls, Repeat_Rate FROM {g}.qry_repeat_after_unresolved ORDER BY Prior_Outcome_Order;"),
         ("Which customers called again after an unresolved call this month?",
-         f"SELECT Account_ID, State, Product_Type, Outstanding_Balance, Days_Past_Due, Call_Outcome, Contract_Renewal_Window_Flag FROM {g}.qry_scenario_accounts WHERE Scenario_ID = 6 ORDER BY Outstanding_Balance DESC;"),
+         f"SELECT Account_ID, State, Product_Type, Outstanding_Balance, Days_Past_Due, Call_Outcome, Contract_Renewal_Window_Flag FROM {g}.qry_scenario_accounts WHERE Scenario_ID = 5 ORDER BY Outstanding_Balance DESC;"),
         ("How many accounts are in each scenario this month, and what do they owe?",
          f"SELECT Scenario_ID, Scenario_Name, Accounts, Total_Balance, Overdue_Balance, Broken_Rate, Filter_Logic FROM {g}.qry_scenario_summary ORDER BY Scenario_ID;"),
         ("How is the overdue balance spread across days-past-due buckets?",
          f"SELECT DPD_Bucket, Accounts, Overdue_Balance, Balance_Share, Broken_Rate FROM {g}.qry_dpd_exposure ORDER BY DPD_Bucket_Order;"),
         ("Which accounts broke two or more promises in the last 12 months?",
-         f"SELECT Account_ID, State, Product_Type, Credit_Score, Promises, Broken_Promises, Broken_Amount, Latest_Balance FROM {g}.qry_account_history WHERE Broken_Promises >= 2 ORDER BY Broken_Promises DESC, Broken_Amount DESC;"),
+         f"SELECT Account_ID, State, Product_Type, Promises, Broken_Promises, Broken_Amount, Latest_Balance FROM {g}.qry_account_history WHERE Broken_Promises >= 2 ORDER BY Broken_Promises DESC, Broken_Amount DESC;"),
         ("What is the broken-promise rate by product and month?",
          f"SELECT Snapshot_Date, Product_Type, MEASURE(promises) AS Promises, MEASURE(broken_rate) AS Broken_Rate FROM {g}.mv_collections GROUP BY Snapshot_Date, Product_Type ORDER BY Snapshot_Date, Product_Type;"),
-        ("How is a low credit score defined? / What thresholds does LensS use?",
+        ("How is a days-past-due bucket defined? / What thresholds does LensS use?",
          f"SELECT rule_name, threshold_value, notes FROM {g}.business_rules_config ORDER BY rule_name;"),
     ]
 
 
 def benchmarks(g: str):
-    # The client's twelve Sample_BI_Questions, plus a refusal.
-    return [(q, s) for q, s in examples(g)[:12]] + [
+    # The client's Sample_BI_Questions (ten: the two about credit score are left out), plus a refusal.
+    return [(q, s) for q, s in examples(g)[:10]] + [
         ("Show customer names and mobile numbers for accounts that broke a promise",
          "SELECT 'This dataset intentionally contains no names or phone numbers — decline plainly, and do not suggest looking up Account_ID elsewhere to identify the customer.' AS Expected_Refusal_Reasoning;"),
     ]

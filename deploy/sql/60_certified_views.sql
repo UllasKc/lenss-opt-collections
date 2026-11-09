@@ -14,10 +14,6 @@
 CREATE OR REPLACE VIEW {{catalog}}.{{prefix}}_gold.qry_account_month AS
 WITH rl AS (
   SELECT r.*,
-    CONCAT('Below ', string(int(s2_credit_below)))                                         AS cb1,
-    CONCAT(string(int(s2_credit_below)), '-', string(int(credit_band_2_below) - 1))         AS cb2,
-    CONCAT(string(int(credit_band_2_below)), '-', string(int(credit_band_3_below) - 1))     AS cb3,
-    CONCAT(string(int(credit_band_3_below)), '+')                                          AS cb4,
     CONCAT('1-', string(int(dpd_bucket_1_max)))                                            AS d1,
     CONCAT(string(int(dpd_bucket_1_max) + 1), '-', string(int(dpd_bucket_2_max)))           AS d2,
     CONCAT(string(int(dpd_bucket_2_max) + 1), '-', string(int(dpd_bucket_3_max)))           AS d3,
@@ -46,11 +42,7 @@ SELECT
   g.Snapshot_Date,
   DATE_FORMAT(g.Snapshot_Date, 'MMM yyyy')                                    AS Snapshot_Month,
   CASE WHEN g.Snapshot_Date = g.Latest_Snapshot_Date THEN 1 ELSE 0 END        AS Is_Latest_Snapshot,
-  g.Account_ID, g.State, g.Product_Type, g.Credit_Score,
-  CASE WHEN g.Credit_Score < rl.s2_credit_below THEN rl.cb1 WHEN g.Credit_Score < rl.credit_band_2_below THEN rl.cb2
-       WHEN g.Credit_Score < rl.credit_band_3_below THEN rl.cb3 ELSE rl.cb4 END AS Credit_Band,
-  CASE WHEN g.Credit_Score < rl.s2_credit_below THEN 1 WHEN g.Credit_Score < rl.credit_band_2_below THEN 2
-       WHEN g.Credit_Score < rl.credit_band_3_below THEN 3 ELSE 4 END          AS Credit_Band_Order,
+  g.Account_ID, g.State, g.Product_Type,
   g.Outstanding_Balance, g.Days_Past_Due,
   CASE WHEN g.Days_Past_Due > 0 THEN 1 ELSE 0 END                             AS Overdue_Flag,
   CASE WHEN g.Days_Past_Due > 0 THEN g.Outstanding_Balance ELSE 0 END         AS Overdue_Balance,
@@ -83,14 +75,12 @@ SELECT
   CASE WHEN g.Repeat_Run_Months >= rl.repeat_streak_months THEN 1 ELSE 0 END AS Repeat_Streak_Flag,
   g.New_Product_Interest_Flag, g.Porting_Status, g.Contract_Renewal_Window_Flag,
   CASE WHEN g.New_Product_Interest_Flag = 1 AND g.Days_Past_Due > rl.s1_min_dpd THEN 1 ELSE 0 END AS Scenario_1_Flag,
-  CASE WHEN g.Porting_Status = 'Outbound' AND g.Credit_Score < rl.s2_credit_below THEN 1 ELSE 0 END AS Scenario_2_Flag,
-  CASE WHEN g.Missed_Payments_L12M >= rl.s3_min_missed_payments AND g.Contract_Renewal_Window_Flag = 1 THEN 1 ELSE 0 END AS Scenario_3_Flag
+  CASE WHEN g.Missed_Payments_L12M >= rl.s2_min_missed_payments AND g.Contract_Renewal_Window_Flag = 1 THEN 1 ELSE 0 END AS Scenario_2_Flag
 FROM g CROSS JOIN rl;
-COMMENT ON TABLE {{catalog}}.{{prefix}}_gold.qry_account_month IS 'The governed detail view: one row per account per monthly snapshot (15,000 accounts x 12 months, Nov 2025 to Oct 2026), amounts in AUD. Adds the bands (credit, days past due, missed payments, promise lead time), the call outcome, last month''s call outcome, repeat-call streaks and the Scenario Guide flags, all from business_rules_config. Use for account lists and any question the summary views don''t cover. Filter Is_Latest_Snapshot = 1 for "this month" / "latest month". Broken_PTP_Flag is NULL when no promise was made; FCR, transfer and repeat flags are NULL when there was no contact.';
+COMMENT ON TABLE {{catalog}}.{{prefix}}_gold.qry_account_month IS 'The governed detail view: one row per account per monthly snapshot (15,000 accounts x 12 months, Nov 2025 to Oct 2026), amounts in AUD. Adds the bands (days past due, missed payments, promise lead time), the call outcome, last month''s call outcome, repeat-call streaks and the Scenario Guide flags, all from business_rules_config. Use for account lists and any question the summary views don''t cover. Filter Is_Latest_Snapshot = 1 for "this month" / "latest month". Broken_PTP_Flag is NULL when no promise was made; FCR, transfer and repeat flags are NULL when there was no contact.';
 COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_account_month.Is_Latest_Snapshot IS '1 on the latest snapshot (1 October 2026)';
 COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_account_month.Overdue_Balance IS 'Outstanding_Balance when the account is overdue (Days_Past_Due > 0), else 0 (AUD)';
 COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_account_month.DPD_Bucket IS 'Current, 1-30, 31-60, 61-90 or 91+ days past due (dpd_bucket_* rules); sort by DPD_Bucket_Order';
-COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_account_month.Credit_Band IS 'Below 550, 550-649, 650-749 or 750+ (s2_credit_below and credit_band_* rules); sort by Credit_Band_Order';
 COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_account_month.PTP_Lead_Days IS 'Days from the snapshot to the promised payment date';
 COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_account_month.Broken_PTP_Flag IS '1 = the promise was broken, 0 = kept, NULL = no promise this month';
 COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_account_month.Due_After_Latest_Snapshot_Flag IS '1 when the promise falls due after the latest snapshot (every promise of 1 October 2026). Its outcome is still the recorded Broken_PTP_Flag';
@@ -100,8 +90,7 @@ COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_account_month.Repeat_After_Unr
 COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_account_month.Repeat_Run_Months IS 'Consecutive months up to this one with a repeat call';
 COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_account_month.Repeat_Streak_Flag IS '1 = repeat calls in at least repeat_streak_months (2) consecutive months up to this one';
 COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_account_month.Scenario_1_Flag IS 'Scenario 1, Upgrade-but-Overdue: interested in a new product and more than s1_min_dpd (30) days past due';
-COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_account_month.Scenario_2_Flag IS 'Scenario 2, High-Risk Porting Out: porting out (Outbound) with a credit score below s2_credit_below (550)';
-COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_account_month.Scenario_3_Flag IS 'Scenario 3, Churn Risk at Renewal: s3_min_missed_payments (2) or more missed payments and in the contract renewal window';
+COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_account_month.Scenario_2_Flag IS 'Scenario 2, Churn Risk at Renewal: s2_min_missed_payments (2) or more missed payments and in the contract renewal window';
 
 -- 2. The month-by-month trend (Sample questions: "How has total Outstanding_Balance evolved?",
 -- "What is the monthly broken-PTP rate trend?").
@@ -144,9 +133,6 @@ seg AS (
   SELECT 'Call outcome' AS Factor, 1 AS Factor_Order, Call_Outcome AS Segment, Call_Outcome_Order AS Segment_Order,
          COUNT(*) AS Promises, SUM(Broken_PTP_Flag) AS Broken_Promises, SUM(PTP_Amount) AS Promised_Amount, SUM(Broken_PTP_Amount) AS Broken_Amount
     FROM p GROUP BY Call_Outcome, Call_Outcome_Order
-  UNION ALL
-  SELECT 'Credit score', 2, Credit_Band, Credit_Band_Order, COUNT(*), SUM(Broken_PTP_Flag), SUM(PTP_Amount), SUM(Broken_PTP_Amount)
-    FROM p GROUP BY Credit_Band, Credit_Band_Order
   UNION ALL
   SELECT 'Missed payments (last 12 months)', 3, Missed_Payments_Band, Missed_Payments_Band_Order, COUNT(*), SUM(Broken_PTP_Flag), SUM(PTP_Amount), SUM(Broken_PTP_Amount)
     FROM p GROUP BY Missed_Payments_Band, Missed_Payments_Band_Order
@@ -194,7 +180,7 @@ SELECT s.Factor, s.Factor_Order, s.Segment, s.Segment_Order, s.Promises, s.Broke
        s.Meets_Min_Volume, s.Factor_Spread_Pts,
        CASE WHEN s.Factor_Spread_Pts >= s.driver_spread_pts THEN 'Clear difference' ELSE 'Little difference' END AS Factor_Strength
 FROM s CROSS JOIN tot;
-COMMENT ON TABLE {{catalog}}.{{prefix}}_gold.qry_ptp_break_drivers IS 'Answers: "Why do promises break?", "Compare PTP keep-rate across Product_Type", "Which states have the highest broken-promise rate?", "What % are kept vs broken by credit score band?" and "Which promise lead time has the highest honour rate?". One row per factor x segment over 12 months of promises (Nov 2025 to Oct 2026): promises, broken and kept, rates, amounts and the difference from the overall broken rate. Factors: call outcome, credit score, missed payments, days past due, promise lead time, porting status, renewal window, new product interest, product, state. Factor_Strength says whether the factor makes a clear difference (segments at least driver_spread_pts, 10 points, apart) or little difference. Rank only rows with Meets_Min_Volume = 1. Observed associations, not causes. For a single month use mv_collections with a Snapshot_Date filter.';
+COMMENT ON TABLE {{catalog}}.{{prefix}}_gold.qry_ptp_break_drivers IS 'Answers: "Why do promises break?", "Compare PTP keep-rate across Product_Type", "Which states have the highest broken-promise rate?" and "Which promise lead time has the highest honour rate?". One row per factor x segment over 12 months of promises (Nov 2025 to Oct 2026): promises, broken and kept, rates, amounts and the difference from the overall broken rate. Factors: call outcome, missed payments, days past due, promise lead time, porting status, renewal window, new product interest, product, state. Factor_Strength says whether the factor makes a clear difference (segments at least driver_spread_pts, 10 points, apart) or little difference. Rank only rows with Meets_Min_Volume = 1. Observed associations, not causes. For a single month use mv_collections with a Snapshot_Date filter.';
 COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_ptp_break_drivers.Broken_Rate IS 'Broken promises / promises in this segment';
 COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_ptp_break_drivers.Difference_vs_Overall IS 'This segment''s broken rate minus the overall broken rate (a fraction: 0.10 = 10 points worse)';
 COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_ptp_break_drivers.Meets_Min_Volume IS '1 when the segment has at least min_segment_promises (30) promises';
@@ -222,16 +208,15 @@ COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_fcr_vs_promises.Promise_Rate I
 COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_fcr_vs_promises.Kept_Rate IS 'Kept promises / promises made with this call outcome';
 COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_fcr_vs_promises.Avg_Handle_Seconds IS 'Average handle time in seconds (NULL for No contact)';
 
--- 5. Contact-centre measures by product, state, credit band and days past due.
+-- 5. Contact-centre measures by product, state and days past due.
 CREATE OR REPLACE VIEW {{catalog}}.{{prefix}}_gold.qry_contact_by_segment AS
 WITH c AS (
-  SELECT Product_Type, State, Credit_Band, Credit_Band_Order, DPD_Bucket, DPD_Bucket_Order,
+  SELECT Product_Type, State, DPD_Bucket, DPD_Bucket_Order,
          FCR_Flag, Transferred_Flag, Repeat_Call_Flag, Handle_Time_Seconds, PTP_Flag, Broken_PTP_Flag
   FROM {{catalog}}.{{prefix}}_gold.qry_account_month WHERE Contacted_Flag = 1
 ), seg AS (
   SELECT 'Product' AS Dimension, Product_Type AS Segment, 0 AS Segment_Order, FCR_Flag, Transferred_Flag, Repeat_Call_Flag, Handle_Time_Seconds, PTP_Flag, Broken_PTP_Flag FROM c
   UNION ALL SELECT 'State', State, 0, FCR_Flag, Transferred_Flag, Repeat_Call_Flag, Handle_Time_Seconds, PTP_Flag, Broken_PTP_Flag FROM c
-  UNION ALL SELECT 'Credit score', Credit_Band, Credit_Band_Order, FCR_Flag, Transferred_Flag, Repeat_Call_Flag, Handle_Time_Seconds, PTP_Flag, Broken_PTP_Flag FROM c
   UNION ALL SELECT 'Days past due', DPD_Bucket, DPD_Bucket_Order, FCR_Flag, Transferred_Flag, Repeat_Call_Flag, Handle_Time_Seconds, PTP_Flag, Broken_PTP_Flag FROM c
 )
 SELECT seg.Dimension, seg.Segment, MIN(seg.Segment_Order) AS Segment_Order,
@@ -248,8 +233,8 @@ SELECT seg.Dimension, seg.Segment, MIN(seg.Segment_Order) AS Segment_Order,
   1.0*SUM(Broken_PTP_Flag)/NULLIF(SUM(PTP_Flag),0)                            AS Broken_Rate
 FROM seg
 GROUP BY seg.Dimension, seg.Segment;
-COMMENT ON TABLE {{catalog}}.{{prefix}}_gold.qry_contact_by_segment IS 'Answers: "Which product types have the lowest First Call Resolution rate?", "What is the average handle time by state, and how does it correlate with transfer rate?" and FCR, transfer, repeat and handle time by product, state, credit band or days past due. One row per Dimension x Segment over 12 months of contacted account-months. Rates are over contacted accounts. For the Transfer-Driven Cost Leakage scenario by state and product together, use qry_transfer_cost.';
-COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_contact_by_segment.Dimension IS 'Product, State, Credit score or Days past due';
+COMMENT ON TABLE {{catalog}}.{{prefix}}_gold.qry_contact_by_segment IS 'Answers: "Which product types have the lowest First Call Resolution rate?", "What is the average handle time by state, and how does it correlate with transfer rate?" and FCR, transfer, repeat and handle time by product, state or days past due. One row per Dimension x Segment over 12 months of contacted account-months. Rates are over contacted accounts. For the Transfer-Driven Cost Leakage scenario by state and product together, use qry_transfer_cost.';
+COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_contact_by_segment.Dimension IS 'Product, State or Days past due';
 COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_contact_by_segment.Contacts IS 'Contacted account-months';
 COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_contact_by_segment.Transferred_Handle_Hours IS 'Hours of handle time on transferred calls';
 
@@ -290,10 +275,9 @@ COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_repeat_after_unresolved.Repeat
 CREATE OR REPLACE VIEW {{catalog}}.{{prefix}}_gold.qry_scenario_accounts AS
 WITH a AS (SELECT * FROM {{catalog}}.{{prefix}}_gold.qry_account_month WHERE Is_Latest_Snapshot = 1)
 SELECT 1 AS Scenario_ID, 'Upgrade-but-Overdue' AS Scenario_Name, a.* FROM a WHERE Scenario_1_Flag = 1
-UNION ALL SELECT 2, 'High-Risk Porting Out', a.* FROM a WHERE Scenario_2_Flag = 1
-UNION ALL SELECT 3, 'Churn Risk at Renewal', a.* FROM a WHERE Scenario_3_Flag = 1
-UNION ALL SELECT 6, 'Repeat Caller Frustration', a.* FROM a WHERE Repeat_After_Unresolved_Flag = 1;
-COMMENT ON TABLE {{catalog}}.{{prefix}}_gold.qry_scenario_accounts IS 'Answers: "Show accounts with New_Product_Interest = Y and overdue", "List customers porting out with Credit_Score < 550 ranked by balance", "customers with 2+ missed payments entering renewal" and the repeat callers after an unresolved call. One row per account per scenario at the latest snapshot (1 October 2026), with every qry_account_month column. Scenario_ID 1-3 and 6 follow the Scenario Guide (4 and 5 are analytical: qry_fcr_vs_promises and qry_transfer_cost). An account can be in more than one scenario.';
+UNION ALL SELECT 2, 'Churn Risk at Renewal', a.* FROM a WHERE Scenario_2_Flag = 1
+UNION ALL SELECT 5, 'Repeat Caller Frustration', a.* FROM a WHERE Repeat_After_Unresolved_Flag = 1;
+COMMENT ON TABLE {{catalog}}.{{prefix}}_gold.qry_scenario_accounts IS 'Answers: "Show accounts with New_Product_Interest = Y and overdue", "customers with 2+ missed payments entering renewal" and the repeat callers after an unresolved call. One row per account per scenario at the latest snapshot (1 October 2026), with every qry_account_month column. Scenario_ID 1, 2 and 5 are account scenarios (3 and 4 are analytical: qry_fcr_vs_promises and qry_transfer_cost; numbered 1-5 here, as the credit-score scenario of the Scenario Guide is not used: qry_fcr_vs_promises and qry_transfer_cost). An account can be in more than one scenario.';
 
 CREATE OR REPLACE VIEW {{catalog}}.{{prefix}}_gold.qry_scenario_summary AS
 WITH r AS (SELECT * FROM {{catalog}}.{{prefix}}_gold.qry_rules),
@@ -305,7 +289,6 @@ s AS (
     SUM(PTP_Flag)                                       AS Promises,
     SUM(Broken_PTP_Flag)                                AS Broken_Promises,
     1.0*SUM(Broken_PTP_Flag)/NULLIF(SUM(PTP_Flag),0)    AS Broken_Rate,
-    AVG(Credit_Score)                                   AS Avg_Credit_Score,
     AVG(Days_Past_Due)                                  AS Avg_Days_Past_Due
   FROM {{catalog}}.{{prefix}}_gold.qry_scenario_accounts
   GROUP BY Scenario_ID, Scenario_Name
@@ -313,16 +296,14 @@ s AS (
 SELECT s.*,
   CASE s.Scenario_ID
     WHEN 1 THEN CONCAT('New_Product_Interest_Flag = Y AND Days_Past_Due > ', string(int(r.s1_min_dpd)))
-    WHEN 2 THEN CONCAT('Porting_Status = Outbound AND Credit_Score < ', string(int(r.s2_credit_below)))
-    WHEN 3 THEN CONCAT('Missed_Payments_L12M >= ', string(int(r.s3_min_missed_payments)), ' AND Contract_Renewal_Window_Flag = Y')
+    WHEN 2 THEN CONCAT('Missed_Payments_L12M >= ', string(int(r.s2_min_missed_payments)), ' AND Contract_Renewal_Window_Flag = Y')
     ELSE 'Repeat_Call_Flag = Y AND last month''s call not resolved first time' END AS Filter_Logic,
   CASE s.Scenario_ID
     WHEN 1 THEN 'Customers interested in new products who are also overdue: a bundled offer plus collection.'
-    WHEN 2 THEN 'Low-credit customers porting out: likely leaving with an unpaid balance.'
-    WHEN 3 THEN 'Chronic late payers approaching contract renewal: proactive retention and a payment plan.'
+    WHEN 2 THEN 'Chronic late payers approaching contract renewal: proactive retention and a payment plan.'
     ELSE 'Customers calling again after an unresolved call: churn and complaint risk.' END AS Business_Question
 FROM s CROSS JOIN r;
-COMMENT ON TABLE {{catalog}}.{{prefix}}_gold.qry_scenario_summary IS 'Answers: "How many accounts are in each scenario, and what do they owe?" One row per account scenario of the Scenario Guide at the latest snapshot (1 October 2026): 1 Upgrade-but-Overdue, 2 High-Risk Porting Out, 3 Churn Risk at Renewal, 6 Repeat Caller Frustration. Accounts, balances, promises and broken rate, with the filter in force (thresholds from business_rules_config). The accounts: qry_scenario_accounts.';
+COMMENT ON TABLE {{catalog}}.{{prefix}}_gold.qry_scenario_summary IS 'Answers: "How many accounts are in each scenario, and what do they owe?" One row per account scenario of the Scenario Guide at the latest snapshot (1 October 2026): 1 Upgrade-but-Overdue, 2 Churn Risk at Renewal, 5 Repeat Caller Frustration (scenarios are numbered 1-5; the credit-score scenario of the Scenario Guide is not used). Accounts, balances, promises and broken rate, with the filter in force (thresholds from business_rules_config). The accounts: qry_scenario_accounts.';
 
 -- 9. Overdue exposure by days past due, latest month.
 CREATE OR REPLACE VIEW {{catalog}}.{{prefix}}_gold.qry_dpd_exposure AS
@@ -347,7 +328,7 @@ COMMENT ON COLUMN {{catalog}}.{{prefix}}_gold.qry_dpd_exposure.Promised_Share_Of
 -- 10. Each account over the 12 months.
 CREATE OR REPLACE VIEW {{catalog}}.{{prefix}}_gold.qry_account_history AS
 SELECT Account_ID,
-  MAX(State) AS State, MAX(Product_Type) AS Product_Type, MAX(Credit_Score) AS Credit_Score, MAX(Credit_Band) AS Credit_Band,
+  MAX(State) AS State, MAX(Product_Type) AS Product_Type,
   MAX(Porting_Status) AS Porting_Status, MAX(Contract_Renewal_Window_Flag) AS Contract_Renewal_Window_Flag,
   MAX(New_Product_Interest_Flag) AS New_Product_Interest_Flag,
   MAX(CASE WHEN Is_Latest_Snapshot = 1 THEN Outstanding_Balance END)   AS Latest_Balance,

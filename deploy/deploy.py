@@ -289,6 +289,17 @@ def step_schemas(sql: Sql, cfg: dict) -> None:
     log(f"Schemas {c}.{p}_{{bronze,silver,gold,context}} and volume raw_files ready")
 
 
+def without_credit_score(sheet: str, df):
+    """Optus does not use credit score: no table gets it. Drops the Credit_Score column, its data-dictionary
+    row, Scenario 2 (defined by it) and the sample questions about it. The version with credit score is
+    tagged v1.0-with-credit-score."""
+    df = df.copy()
+    if "Credit_Score" in df.columns:
+        df = df.drop(columns=["Credit_Score"])
+    text = df.astype(str).apply(lambda col: col.str.contains(r"credit|Scenario 2:", case=False, regex=True))
+    return df[~text.any(axis=1)].reset_index(drop=True) if sheet != "Collections_Fact" else df
+
+
 def step_ingest(db: Databricks, sql: Sql, cfg: dict) -> None:
     import pandas as pd  # imported lazily so other steps don't need pandas
 
@@ -304,10 +315,11 @@ def step_ingest(db: Databricks, sql: Sql, cfg: dict) -> None:
     if missing:
         raise DeployError(f"Workbook is missing sheets: {sorted(missing)}")
 
-    db.run("fs", "cp", str(xlsx), f"dbfs:{volume}/{xlsx.name}", "--overwrite", output_json=False)
+    # The workbook itself is not copied to the volume: it has Credit_Score, which this app leaves out.
+    db.run("fs", "rm", f"dbfs:{volume}/{xlsx.name}", output_json=False, check=False)
     with tempfile.TemporaryDirectory() as tmp:
         for sheet, (layer, table) in SHEETS.items():
-            df = sheets[sheet].copy()
+            df = without_credit_score(sheet, sheets[sheet])
             for col in df.columns:
                 if pd.api.types.is_datetime64_any_dtype(df[col]):
                     df[col] = df[col].dt.strftime("%Y-%m-%d")
@@ -363,7 +375,7 @@ def step_transform(sql: Sql, cfg: dict) -> None:
     scen = dict(sql.execute(f"SELECT Scenario_ID, Accounts FROM {c}.{p}_gold.qry_scenario_summary"))
     log(f"Transform done — sanity check: {int(rows):,} account-months, {int(accounts):,} accounts, {int(promises):,} promises "
         f"(the v2 workbook: 180,000 / 15,000 / 15,648); scenarios at the latest snapshot "
-        f"1={scen.get('1')} 2={scen.get('2')} 3={scen.get('3')} (Scenario_Guide: 339 / 115 / 473), 6={scen.get('6')}")
+        f"1={scen.get('1')} 2={scen.get('2')} (Scenario_Guide: 339 / 473), 5={scen.get('5')}")
 
 
 def money(v) -> str:
@@ -408,10 +420,6 @@ def build_exec_summary(sql: Sql, gold: str) -> tuple[str, str]:
     if fcr is not None and xfer is not None and unres is not None:
         parts.append(f"Promises break most where the call went wrong: {pct(xfer)} broke after a transferred call and "
                      f"{pct(unres)} after an unresolved call, against {pct(fcr)} when the call was resolved first time.")
-    credit = [r for r in drivers if r[0] == "Credit score"]
-    if len(credit) > 1:
-        parts.append(f"Credit history matters too: {pct(credit[0][2])} broke with a credit score {credit[0][1].lower()}, "
-                     f"against {pct(credit[-1][2])} at {credit[-1][1]}.")
     flat = [f.lower() for f in ("Product", "State", "Porting status", "Contract renewal window")
             if any(r[0] == f and r[3] == "Little difference" for r in drivers)]
     if flat:
@@ -421,9 +429,8 @@ def build_exec_summary(sql: Sql, gold: str) -> tuple[str, str]:
         parts.append(f"Customers whose call was not resolved called again {pct(repeat['Not resolved last month'])} of the time "
                      f"the next month, against {pct(repeat['Resolved first time last month'])} after a first-time resolution.")
     if scen:
-        parts.append(f"Scenarios this month: {scen.get(1, 0):,} upgrade-but-overdue, {scen.get(2, 0):,} porting out with a low "
-                     f"credit score, {scen.get(3, 0):,} chronic late payers at renewal and {scen.get(6, 0):,} repeat callers "
-                     f"after an unresolved call.")
+        parts.append(f"Scenarios this month: {scen.get(1, 0):,} upgrade-but-overdue, {scen.get(2, 0):,} chronic late payers "
+                     f"at renewal and {scen.get(5, 0):,} repeat callers after an unresolved call.")
     return " ".join(parts), snapshot
 
 
@@ -1245,11 +1252,11 @@ def step_org_smoke(db: Databricks, sql: Sql, cfg: dict, state: dict, cfg_path: P
             f"SELECT COUNT(*), COUNT(DISTINCT Account_ID), SUM(PTP_Flag) FROM {gold}.qry_account_month")[0]
         scen = {str(r[0]): int(r[1]) for r in sql.execute(f"SELECT Scenario_ID, Accounts FROM {gold}.qry_scenario_summary")}
         rules = int(sql.execute(f"SELECT COUNT(*) FROM {gold}.business_rules_config")[0][0])
-        got = (int(rows), int(accounts), int(promises), scen.get("1"), scen.get("2"), scen.get("3"), rules)
-        msg = (f"{got[0]:,} account-months, {got[1]:,} accounts, {got[2]:,} promises; scenarios {got[3]} / {got[4]} / {got[5]}; "
-               f"{rules} rules")
-        if got != (180000, 15000, 15648, 339, 115, 473, 16):
-            raise warn(f"differs from the v2 workbook (180,000 / 15,000 / 15,648; Scenario_Guide 339 / 115 / 473; 16 rules): {msg}")
+        got = (int(rows), int(accounts), int(promises), scen.get("1"), scen.get("2"), sorted(scen), rules)
+        msg = (f"{got[0]:,} account-months, {got[1]:,} accounts, {got[2]:,} promises; scenarios 1={got[3]} 2={got[4]} "
+               f"(ids {', '.join(got[5])}); {rules} rules")
+        if got != (180000, 15000, 15648, 339, 473, ["1", "2", "5"], 13):
+            raise warn(f"differs from the v2 workbook without credit score (180,000 / 15,000 / 15,648; scenarios 1=339, 2=473, ids 1, 2, 5; 13 rules): {msg}")
         return msg
     pc("P3", "Gold data matches the source data", data_facts)
 
@@ -1268,11 +1275,11 @@ def step_org_smoke(db: Databricks, sql: Sql, cfg: dict, state: dict, cfg_path: P
     pc("P4", "Every gold object exists and has a description", described)
 
     def metric_rules():
-        (mv,) = sql.execute(f"SELECT MEASURE(broken_promises) FROM {gold}.mv_collections WHERE Credit_Band = 'Below 550'")[0]
-        (qv,) = sql.execute(f"SELECT SUM(Broken_PTP_Flag) FROM {gold}.qry_account_month WHERE Credit_Band = 'Below 550'")[0]
+        (mv,) = sql.execute(f"SELECT MEASURE(broken_promises) FROM {gold}.mv_collections WHERE DPD_Bucket = '91+'")[0]
+        (qv,) = sql.execute(f"SELECT SUM(Broken_PTP_Flag) FROM {gold}.qry_account_month WHERE DPD_Bucket = '91+'")[0]
         if int(float(mv or 0)) != int(float(qv or 0)):
-            raise RuntimeError(f"metric view counts {mv} broken promises below 550, certified view {qv}: re-run transform")
-        return f"metric view and certified view agree: {int(float(mv)):,} broken promises with a credit score below 550"
+            raise RuntimeError(f"metric view counts {mv} broken promises at 91+ days past due, certified view {qv}: re-run transform")
+        return f"metric view and certified view agree: {int(float(mv)):,} broken promises at 91+ days past due"
     pc("P5", "Metric view bands use the rules table's thresholds", metric_rules)
 
     def genie():

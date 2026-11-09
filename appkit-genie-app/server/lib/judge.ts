@@ -43,7 +43,7 @@ export function extractClaims(text: string): Claim[] {
   const clean = text
     .replace(/\[\[chart:[^\]]+\]\]/g, ' ')
     .replace(/^\s*\d+[.)]\s+/gm, ' ')                                     // list numbering
-    .replace(/(?<![\w.])(1-30|31-60|61-90|91\+|550-649|650-749|750\+|7-10|11-14|15\+|7-14|7 to 14)(?!\d)/g, ' ')    // band names: days past due, credit score, lead time, the repeat window
+    .replace(/(?<![\w.])(1-30|31-60|61-90|91\+|7-10|11-14|15\+|7-14|7 to 14)(?!\d)/g, ' ')    // band names: days past due, lead time, the repeat window
     .replace(/\b\d{1,2}(:\d{2})?\s*(-|–|to)\s*\d{1,2}(:\d{2})?\s*(am|pm)\b/gi, ' ') // contact-time windows
     .replace(/\b\d{4}-\d{2}-\d{2}\b/g, ' ')                               // dates
     .replace(/\b[A-Za-z]{2,}[-_]\d+\b/g, ' ')                              // identifiers: account IDs like OPT-10000001
@@ -108,13 +108,13 @@ export function evidenceNumbers(evidence: Evidence[]): number[] {
 
 /**
  * Business-rule thresholds and policy constants Genie is given (gold.business_rules_config,
- * the space instructions and the certified views): quoting them, e.g. "a credit score below
- * 550" or "more than 30 days past due", is not a data claim.
- *   30 days past due (scenario 1) and 30 minimum promises · 550, 650, 750 credit bands
+ * the space instructions and the certified views): quoting them, e.g. "more than 30 days past
+ * due", is not a data claim.
+ *   30 days past due (scenario 1) and 30 minimum promises
  *   · 60 and 90 days-past-due buckets · 0.10 (10 points) driver spread · 100 top accounts
  *   · 7 to 14 days repeat window · 12 months of snapshots.
  */
-const RULE_NUMBERS = [30, 550, 650, 750, 60, 90, 0.1, 100, 7, 14, 12];
+const RULE_NUMBERS = [30, 60, 90, 0.1, 100, 7, 14, 12];
 
 function supported(c: Claim, nums: number[]): boolean {
   if (!c.unit || c.percent) {

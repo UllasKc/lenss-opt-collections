@@ -8,6 +8,31 @@ Versions match git tags where one exists.
 
 ## Unreleased
 
+### Scenarios renumbered 1-5; chapter 2 cards fill the row
+- With the credit-score scenario gone, scenarios are numbered 1 to 5 everywhere: views, Genie, Command Center, guide and tests.
+  - 1 Upgrade-but-Overdue
+  - 2 Churn Risk at Renewal (was 3)
+  - 3 Contact Center Efficiency vs Collections (was 4)
+  - 4 Transfer-Driven Cost Leakage (was 5)
+  - 5 Repeat Caller Frustration (was 6)
+
+  The rule `s3_min_missed_payments` is now `s2_min_missed_payments`, and `Scenario_3_Flag` is now `Scenario_2_Flag`.
+- The "Why do promises break?" cards fill the row: two cards now span it instead of leaving a third column empty.
+
+### Credit score removed everywhere (Optus does not use it)
+- The version with credit score is tagged `v1.0-with-credit-score` (commit 5511b47).
+- **Ingest:** `Credit_Score` is dropped before any table is written, along with:
+  - its data-dictionary row;
+  - Scenario 2 (High-Risk Porting Out, defined by credit score below 550);
+  - Optus's two sample questions about credit score.
+
+  The workbook is no longer copied to the volume.
+- **Silver and gold:** no credit score or credit band anywhere, including the metric view. The rules `s2_credit_below` and `credit_band_*` are gone (16 rules become 13). The certified views lose the credit factor, segment and scenario: five scenarios are left (1, 3, 4, 5, 6).
+- **Genie:** the space has no credit instructions or examples, says plainly that the data has no credit score, and is benchmarked on Optus's other 10 questions. The server, the answer checker and the tests are updated to match:
+  - deploy check: scenarios 339 / 473 and 13 rules;
+  - P5: checks the 91+ bucket;
+  - org smoke E4: expects "not in this data".
+
 ### Credit score out of the front end (Optus does not use it)
 - Credit score is gone from every front-end insight; the data still has it. That covers:
   - the chapter 2 driver card and the executive summary;
