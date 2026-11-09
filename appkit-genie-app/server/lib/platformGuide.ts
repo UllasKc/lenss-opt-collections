@@ -23,18 +23,18 @@ The answers come from the **LensS Intelligence Engine**, which turns a question 
     text: `The **Command Center** is the one-minute view of Optus collections, told as one story in five chapters (the bar under the summary jumps to each):
 - **1 · Promises (the top banner):** the latest month's promises to pay, how many were kept and broken and their amounts, against the 12-month rate; four tiles: overdue balance, promises broken, resolved first time (FCR) and customers who called again after an unresolved call.
 - **Executive summary:** "The month in 30 seconds", five lines (one per chapter) and a bottom line; each line jumps to its chapter.
-- **2 · Why promises break:** a card per factor that makes a clear difference (call outcome, credit score, missed payments…), with the broken rate of each segment against the overall rate, and the factors that make little difference (product, state, porting, renewal window, new product interest) grouped together.
+- **2 · Why promises break:** a card per factor that makes a clear difference (call outcome, missed payments…), with the broken rate of each segment against the overall rate, and the factors that make little difference (product, state, porting, renewal window, new product interest) grouped together.
 - **3 · Contact centre:** FCR, transfers, repeat calls and average handle time (latest month, last month and 12 months), then Scenario 4 (promises broken by call outcome), Scenario 5 (transfers and handle time by state) and Scenario 6 (repeat calls after an unresolved call).
 - **4 · Where the money is:** the overdue balance by days-past-due bucket, and a 12-month trend chart (switch between overdue balance, broken rate, amount promised, FCR, transfers and repeat calls).
-- **5 · Scenarios:** a card for each of the six scenarios in Optus's Scenario Guide, and the broken promises with the most at stake.
+- **5 · Scenarios:** a card for each of Optus's Scenario Guide scenarios used here (1, 3, 4, 5 and 6), and the broken promises with the most at stake.
 - **View accounts** (or **View**) on any figure opens the accounts behind it, with **Export CSV**. **KPI definitions** (in the banner and at the bottom) explain every figure.
 Every panel has an **Ask LensS** button; hover over it to see the exact question it will ask.`,
   },
   {
     id: 'explorer', title: 'Explorer tab',
-    keywords: ['explorer', 'filter', 'filters', 'drill', 'drill down', 'slice', 'slicer', 'why', 'state', 'product', 'month', 'credit', 'call outcome', 'export', 'csv', 'download data', 'accounts list', 'records', 'segment'],
+    keywords: ['explorer', 'filter', 'filters', 'drill', 'drill down', 'slice', 'slicer', 'why', 'state', 'product', 'month', 'call outcome', 'export', 'csv', 'download data', 'accounts list', 'records', 'segment'],
     text: `The **Explorer** answers "why": it slices the same governed data by any combination of filters.
-- **Filters:** month (or all 12 months), product, state, credit score, days past due, missed payments (12 months), call outcome, porting status, contract renewal window and new product interest. It opens on the latest month. Active filters show as chips; click a chip's × to remove it, or **Reset filters** (back to the latest month).
+- **Filters:** month (or all 12 months), product, state, days past due, missed payments (12 months), call outcome, porting status, contract renewal window and new product interest. It opens on the latest month. Active filters show as chips; click a chip's × to remove it, or **Reset filters** (back to the latest month).
 - **Headline tiles** show the filtered figures (overdue balance, promises, broken rate, FCR, transfers, repeat calls, handle time), compared with the whole book in the same period.
 - **Analytical exploration workspace:** pick a dimension and a measure to compare, as bars or a table. **Click any bar to filter the whole page to it** (drill-down).
 - **Promises broken by call outcome** and the **12-month trend of this view** follow the filters (the trend ignores the month filter).
@@ -57,7 +57,7 @@ With the latest month and no other filter, every Explorer figure reconciles exac
   {
     id: 'howto', title: 'How to do common things (exact steps)',
     keywords: ['how do i', 'how can i', 'how to', 'steps', 'filter', 'state', 'product', 'month', 'export', 'csv', 'drill', 'pdf', 'download', 'new chat', 'search', 'rename', 'delete', 'mode', 'log out', 'kpi definitions', 'sql', 'feedback', 'evals', 'run evals', 'accounts'],
-    text: `- **Filter the Explorer (for example by state):** open the **Explorer** tab. At the top of the page are dropdown boxes, one per filter (Month, Product, State, Credit score, Days past due, Missed payments, Call outcome, Porting status, Contract renewal window, New product interest). Choose a value in the **State** dropdown; the whole page updates. The filter appears as a chip; click its × to remove it, or **Reset filters** (top right of the Explorer) to go back to the latest month.
+    text: `- **Filter the Explorer (for example by state):** open the **Explorer** tab. At the top of the page are dropdown boxes, one per filter (Month, Product, State, Days past due, Missed payments, Call outcome, Porting status, Contract renewal window, New product interest). Choose a value in the **State** dropdown; the whole page updates. The filter appears as a chip; click its × to remove it, or **Reset filters** (top right of the Explorer) to go back to the latest month.
 - **Look at another month or the whole year:** in the Explorer, use the **Month** dropdown; choose **All 12 months** for the year.
 - **Drill down:** in the Explorer's analytical exploration workspace, choose a **Dimension** and a **Measure**, then click any bar.
 - **See the accounts behind a figure:** click **View accounts** (or **View**) next to it on the Command Center or in the Explorer; the window has **Export CSV**.

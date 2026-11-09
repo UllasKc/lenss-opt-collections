@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------- Explorer
-// The "why" behind the Command Center. Filters (month, product, state, credit score, days past
+// The "why" behind the Command Center. Filters (month, product, state, days past
 // due, missed payments, call outcome, porting, renewal window, new product interest) slice one
 // governed view (gold.qry_account_month) with the same formulas as the Command Center, so with the
 // latest month and no other filter every figure reconciles to it. Layer 1 is a dimension × measure
@@ -12,7 +12,6 @@
     ['month', 'Month', 'All 12 months'],
     ['product', 'Product', 'All products'],
     ['state', 'State', 'All states'],
-    ['credit', 'Credit score', 'All credit scores'],
     ['bucket', 'Days past due', 'All'],
     ['missed', 'Missed payments (12 months)', 'All'],
     ['outcome', 'Call outcome', 'All call outcomes'],
@@ -34,7 +33,6 @@
     contact_rate: { label: 'Contacted', fmt: v => pct(v), rate: true },
     overdue_accounts: { label: 'Overdue accounts', fmt: v => count(v), rate: false },
     accounts: { label: 'Accounts', fmt: v => count(v), rate: false },
-    avg_credit: { label: 'Average credit score', fmt: v => count(v), rate: true, good: true },
   };
   const PAGE = 12;
 
@@ -51,7 +49,7 @@
   /** "for NBN, NSW, October 2026": the current filters in words, for questions and notes. */
   function scopeText() {
     return FILTERS.filter(([k]) => state.filters[k]).map(([k]) => (k === 'bucket' ? `${state.filters[k]} days past due`
-      : k === 'credit' ? `credit score ${state.filters[k]}` : k === 'missed' ? `${state.filters[k]} missed payments`
+      : k === 'missed' ? `${state.filters[k]} missed payments`
         : k === 'outcome' ? `call outcome "${state.filters[k]}"` : state.filters[k])).join(', ');
   }
   const scoped = (q) => { const sc = scopeText(); return sc ? `${q.replace(/\?$/, '')} (for ${sc})?` : q; };
@@ -435,7 +433,6 @@
     balance: ['Largest balance, all accounts', r => -num(r.Outstanding_Balance)],
     dpd: ['Days overdue', r => -num(r.Days_Past_Due)],
     promise: ['Promised', r => -(num(r.PTP_Amount) || 0)],
-    credit: ['Credit score (lowest first)', r => num(r.Credit_Score)],
     handle: ['Handle time', r => -(num(r.Handle_Time_Seconds) || 0)],
   };
   function accountRows() {
@@ -461,11 +458,10 @@
         <label>Sort <select id="xpSort">${Object.entries(SORTS).map(([k, [l]]) => `<option value="${k}"${k === state.sort ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
       </div></div>
       <div class="panel-body"><div class="table-scroll flat"><table class="nice xp-acc">
-        <thead><tr><th>Account</th><th>Month</th><th>State · product</th><th>Credit</th><th>Balance</th><th>Days overdue</th><th>Promise</th><th>Call</th><th>Missed payments</th><th></th></tr></thead>
+        <thead><tr><th>Account</th><th>Month</th><th>State · product</th><th>Balance</th><th>Days overdue</th><th>Promise</th><th>Call</th><th>Missed payments</th><th></th></tr></thead>
         <tbody>${rows.map(r => `<tr>
           <td class="mono">${hEsc(r.Account_ID)}</td><td>${hEsc(r.Snapshot_Month)}</td>
           <td>${hEsc(r.State)} <span class="muted">· ${hEsc(r.Product_Type)}</span></td>
-          <td><span class="xp-tag ${num(r.Credit_Score) < 550 ? 'bad' : num(r.Credit_Score) < 650 ? 'warn' : 'ok'}">${count(r.Credit_Score)}</span></td>
           <td>${money(r.Outstanding_Balance)}</td><td>${count(r.Days_Past_Due)}</td><td>${prom(r)}</td>
           <td>${hEsc(r.Call_Outcome)}${String(r.Repeat_Call_Flag) === '1' ? ' <span class="xp-tag warn">called again</span>' : ''}</td><td>${count(r.Missed_Payments_L12M)}</td>
           <td><button class="ask-link" data-ask="${hEsc(`Tell me about account ${r.Account_ID}: its promises to pay over 12 months, how its calls went, and its balance and days past due.`)}" data-mode="chat">${icon('spark', 'ico-xs')}Ask LensS</button></td></tr>`).join('')
@@ -484,7 +480,7 @@
   function exportCsv() {
     const rows = accountRows();
     if (!rows.length) return;
-    const cols = ['Account_ID', 'Snapshot_Month', 'State', 'Product_Type', 'Credit_Score', 'Credit_Band', 'Outstanding_Balance', 'Overdue_Balance',
+    const cols = ['Account_ID', 'Snapshot_Month', 'State', 'Product_Type', 'Outstanding_Balance', 'Overdue_Balance',
       'Days_Past_Due', 'DPD_Bucket', 'PTP_Flag', 'PTP_Amount', 'PTP_Due_Date', 'Broken_PTP_Flag', 'Call_Outcome', 'Repeat_Call_Flag',
       'Handle_Time_Seconds', 'Missed_Payments_L12M', 'Porting_Status', 'Contract_Renewal_Window_Flag', 'New_Product_Interest_Flag'];
     const cell = v => { const x = String(v ?? ''); return /[",\n]/.test(x) ? `"${x.replace(/"/g, '""')}"` : x; };
@@ -507,7 +503,7 @@
       if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || r.statusText);
       state.options = await r.json();
       for (const k of Object.keys(state.filters)) {
-        if (!(state.options.dims[k] || []).includes(state.filters[k])) delete state.filters[k];
+        if (!DIM_LABEL[k] || !(state.options.dims[k] || []).includes(state.filters[k])) delete state.filters[k];
       }
       // First visit: the latest month, so the Explorer opens on the same figures as the Command Center.
       let firstVisit = true;

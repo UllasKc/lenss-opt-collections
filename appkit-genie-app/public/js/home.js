@@ -95,8 +95,8 @@ const KPI_DICT = [
   ['Repeat after an unresolved call', 'Scenario 6, Repeat Caller Frustration.', 'Accounts that called again this month after a call last month that was not resolved first time.'],
   ['Average handle time', 'Effort per call.', 'Average handle time in seconds of contacted accounts. No cost per minute has been supplied, so no dollar cost is shown.'],
   ['Why promises break', 'Where to act.', 'The broken-promise rate of each segment over 12 months of promises. A factor makes a clear difference when its segments (30+ promises each) are at least 10 percentage points apart (business rule driver_spread_pts); otherwise little difference. Observed, not causal.'],
-  ['Credit band / days-past-due bucket', 'The bands used everywhere.', 'Credit score below 550, 550–649, 650–749, 750+. Days past due 1–30, 31–60, 61–90, 91+. Both come from the business rules.'],
-  ['Scenarios 1–6', 'Optus\'s Scenario Guide.', '1 Upgrade-but-Overdue: new product interest and more than 30 days past due. 2 High-Risk Porting Out: porting out with a credit score below 550. 3 Churn Risk at Renewal: 2+ missed payments in the renewal window. 4 FCR against kept promises. 5 Transfers and handle time. 6 Repeat calls after an unresolved call. Counts are at the latest snapshot.'],
+  ['Days-past-due bucket', 'The bands used everywhere.', 'Days past due 1–30, 31–60, 61–90, 91+, from the business rules.'],
+  ['Scenarios', 'Optus\'s Scenario Guide.', '1 Upgrade-but-Overdue: new product interest and more than 30 days past due. 3 Churn Risk at Renewal: 2+ missed payments in the renewal window. 4 FCR against kept promises. 5 Transfers and handle time. 6 Repeat calls after an unresolved call. Counts are at the latest snapshot.'],
 ];
 function openKpiDict() {
   document.getElementById('kpiDictBody').innerHTML = `<p class="score-reason">Optus collections, 12 monthly snapshots (November 2025 to October 2026), amounts in Australian dollars. Every figure comes from certified views; no AI computes them.</p>
@@ -201,7 +201,7 @@ function renderExecSummary(s, o) {
   const top = strong[0];
   const exposure = o.exposure || [];
   const biggest = exposure.slice().sort((a, b) => num(b.Overdue_Balance) - num(a.Overdue_Balance))[0];
-  const scen = o.scenarios || [];
+  const scen = shownScenarios(o);
   const sc = id => scen.find(r => String(r.Scenario_ID) === String(id)) || {};
   const largest = scen.slice().sort((a, b) => num(b.Accounts) - num(a.Accounts))[0];
   const spread = ruleVal(s, 'driver_spread_pts', 0.10);
@@ -218,7 +218,7 @@ function renderExecSummary(s, o) {
       pct(s.FCR_Rate), 'resolved first time', 'brand'],
     ['ch4', 'Where the money is', `${money(s.Overdue_Balance)} overdue across ${count(s.Overdue_Accounts)} accounts${biggest ? `; the most, ${money(biggest.Overdue_Balance)} (${pct(biggest.Balance_Share, 0)}), is ${hEsc(biggest.DPD_Bucket)} days past due` : ''}.`,
       money(s.Overdue_Balance), 'overdue', 'brand'],
-    ['ch5', 'Scenarios', `${count(sc(1).Accounts)} upgrade-but-overdue, ${count(sc(2).Accounts)} porting out with a low credit score, ${count(sc(3).Accounts)} chronic late payers at renewal and ${count(sc(6).Accounts)} repeat callers after an unresolved call.`,
+    ['ch5', 'Scenarios', `${count(sc(1).Accounts)} upgrade-but-overdue, ${count(sc(3).Accounts)} chronic late payers at renewal and ${count(sc(6).Accounts)} repeat callers after an unresolved call.`,
       count(largest && largest.Accounts), largest ? largest.Scenario_Name.toLowerCase() : '', 'good'],
   ];
   document.getElementById('execSumList').innerHTML = rows.map(([id, label, line, fig, figLabel, tone], i) => `
@@ -229,10 +229,16 @@ function renderExecSummary(s, o) {
     </a></li>`).join('');
 }
 
+/** Optus does not use credit score, so it is left out of every insight (the data keeps it). */
+const HIDDEN_FACTORS = new Set(['Credit score']);
+/** Scenario 2 (porting out with a credit score below 550) is left out for the same reason. */
+const shownScenarios = o => (o.scenarios || []).filter(r => String(r.Scenario_ID) !== '2');
+
 /** Factors grouped from qry_ptp_break_drivers: segments, spread, strength, highest and lowest segment. */
 function factorsOf(drivers) {
   const m = new Map();
   for (const r of drivers || []) {
+    if (HIDDEN_FACTORS.has(r.Factor)) continue;
     if (!m.has(r.Factor)) m.set(r.Factor, { factor: r.Factor, order: num(r.Factor_Order), rows: [], spread: num(r.Factor_Spread_Pts), strength: r.Factor_Strength });
     m.get(r.Factor).rows.push(r);
   }
@@ -415,16 +421,15 @@ function renderTrend(o, key) {
 /** 5. Which customers need a different conversation? The Scenario Guide's six scenarios. */
 function renderScenarios(s, o) {
   const month = monthLabel(s.as_of);
-  const scen = o.scenarios || [];
+  const scen = shownScenarios(o);
   const sc = id => scen.find(r => String(r.Scenario_ID) === String(id)) || {};
   const r = (n, f) => count(ruleVal(s, n, f));
   const fcr = outcomeRow(o, 'Resolved first time'), xfer = outcomeRow(o, 'Transferred');
   const xferHours = (o.transferByState || []).reduce((a, x) => a + num(x.Transferred_Handle_Hours), 0);
-  setTake('ch5Take', `Optus's Scenario Guide picks out four groups of accounts in ${hEsc(month)}, plus two contact-centre patterns (chapter 3). ` +
+  setTake('ch5Take', `Optus's Scenario Guide picks out three groups of accounts in ${hEsc(month)}, plus two contact-centre patterns (chapter 3). ` +
     `The largest is <b>${count(Math.max(...scen.map(x => num(x.Accounts) || 0), 0))}</b> accounts; an account can be in more than one.`);
   const asks = {
     1: `Which customers are interested in a new product but more than ${r('s1_min_dpd', 30)} days overdue, and how should we approach them?`,
-    2: `Which customers are porting out with a credit score below ${r('s2_credit_below', 550)}, ranked by outstanding balance?`,
     3: `For customers with ${r('s3_min_missed_payments', 2)}+ missed payments entering renewal, what % broke their last promise to pay?`,
     6: 'Which customers called again after an unresolved call this month?',
   };
@@ -440,7 +445,7 @@ function renderScenarios(s, o) {
       <div class="scen-v">${value}<small>${hEsc(unit)}</small></div><div class="scen-d">${desc}</div>
       <div class="card-btns"><a class="view-btn" href="#ch3">See chapter 3</a>${askBtn(q, 'agent')}</div></div>`;
   document.getElementById('scenarios').innerHTML = [
-    accountCard(1), accountCard(2), accountCard(3),
+    accountCard(1), accountCard(3),
     patternCard(4, 'Contact Center Efficiency vs Collections', pct(xfer.Broken_Rate), 'broken after a transfer',
       `Against ${pct(fcr.Broken_Rate)} after a first-time resolution: promises made after a transfer break more often (12 months).`,
       'Compare FCR rates against promise-kept rates: does agent quality drive recovery?'),
@@ -457,12 +462,12 @@ function renderTopBroken(s, o) {
   const n = ruleVal(s, 'top_accounts', 100);
   const month = monthLabel(s.as_of);
   const body = `<div class="table-scroll flat"><table class="nice">
-    <thead><tr><th>Account</th><th>State · product</th><th>Balance</th><th>Days overdue</th><th>Promised</th><th>Credit score</th><th>Call</th></tr></thead>
+    <thead><tr><th>Account</th><th>State · product</th><th>Balance</th><th>Days overdue</th><th>Promised</th><th>Call</th></tr></thead>
     <tbody>${rows.map(r => `<tr>
       <td class="mono">${hEsc(r.Account_ID)}</td><td>${hEsc(r.State)} <span class="muted">· ${hEsc(r.Product_Type)}</span></td>
       <td><b>${money(r.Outstanding_Balance)}</b></td><td>${count(r.Days_Past_Due)}</td>
       <td>${money(r.PTP_Amount)} <span class="muted">due ${hEsc(String(r.PTP_Due_Date || '').slice(0, 10))}</span></td>
-      <td>${count(r.Credit_Score)}</td><td>${hEsc(r.Call_Outcome)}</td></tr>`).join('') || '<tr><td colspan="7" class="empty-note">No broken promises this month.</td></tr>'}</tbody></table></div>`;
+      <td>${hEsc(r.Call_Outcome)}</td></tr>`).join('') || '<tr><td colspan="6" class="empty-note">No broken promises this month.</td></tr>'}</tbody></table></div>`;
   panel('pnlTopBroken', `The ${count(n)} broken promises with the most at stake`, `${hEsc(month)}, largest outstanding balance first. The 8 largest are shown. ${viewBtn('top_broken', `View all ${count(n)}`, '', `Top ${count(n)} broken promises, ${month}`, true)}`,
     { q: `Show me the top ${count(n)} accounts by outstanding balance where the promise to pay was broken in the latest month.`, mode: 'chat' }, body);
 }
@@ -524,17 +529,17 @@ async function showAccountList({ url, title, rule, file }) {
     (num(t.promised) ? ` · <b>${money(t.promised)}</b> promised` : '') + (num(t.broken_amount) ? ` · <b>${money(t.broken_amount)}</b> broken` : '') +
     (d.truncated ? ` <span class="muted">(the first ${count(acctRows.length)} are listed and exported)</span>` : '');
   const promise = r => (num(r.PTP_Amount) ? `${money(r.PTP_Amount)} <span class="muted">due ${hEsc(String(r.PTP_Due_Date || '').slice(0, 10))}${flag(r.Broken_PTP_Flag) ? ', broken' : flag(r.Broken_PTP_Flag) === false ? ', kept' : ''}</span>` : '<span class="muted">—</span>');
-  document.getElementById('acctBody').innerHTML = `<table class="nice"><thead><tr><th>Account</th>${months ? '<th>Month</th>' : ''}<th>State · product</th><th>Credit</th><th>Balance</th><th>Days overdue</th>
+  document.getElementById('acctBody').innerHTML = `<table class="nice"><thead><tr><th>Account</th>${months ? '<th>Month</th>' : ''}<th>State · product</th><th>Balance</th><th>Days overdue</th>
       <th>Promise</th><th>Call</th><th>Handle time</th><th>Missed payments</th><th>Porting · renewal</th></tr></thead>
     <tbody>${acctRows.map(r => `<tr><td class="mono">${hEsc(r.Account_ID)}</td>${months ? `<td>${hEsc(r.Snapshot_Month)}</td>` : ''}
-      <td>${hEsc(r.State)} <span class="muted">· ${hEsc(r.Product_Type)}</span></td><td>${count(r.Credit_Score)}</td>
+      <td>${hEsc(r.State)} <span class="muted">· ${hEsc(r.Product_Type)}</span></td>
       <td>${money(r.Outstanding_Balance)}</td><td>${count(r.Days_Past_Due)}</td><td>${promise(r)}</td>
       <td>${hEsc(r.Call_Outcome)}${flag(r.Repeat_Call_Flag) ? ' <span class="xp-tag warn">called again</span>' : ''}</td>
       <td>${num(r.Handle_Time_Seconds) === null ? '<span class="muted">—</span>' : secs(r.Handle_Time_Seconds)}</td><td>${count(r.Missed_Payments_L12M)}</td>
       <td>${hEsc(r.Porting_Status)}${flag(r.Contract_Renewal_Window_Flag) ? ' <span class="muted">· renewal</span>' : ''}</td></tr>`).join('')}</tbody></table>`;
   document.getElementById('acctCsv').disabled = !acctRows.length;
   document.getElementById('acctCsv').onclick = () => {
-    const cols = ['Account_ID', 'Snapshot_Month', 'State', 'Product_Type', 'Credit_Score', 'Outstanding_Balance', 'Days_Past_Due', 'DPD_Bucket', 'PTP_Amount',
+    const cols = ['Account_ID', 'Snapshot_Month', 'State', 'Product_Type', 'Outstanding_Balance', 'Days_Past_Due', 'DPD_Bucket', 'PTP_Amount',
       'PTP_Due_Date', 'Broken_PTP_Flag', 'Call_Outcome', 'Repeat_Call_Flag', 'Handle_Time_Seconds', 'Missed_Payments_L12M', 'Porting_Status',
       'Contract_Renewal_Window_Flag', 'New_Product_Interest_Flag'];
     const cell = v => (v === null || v === undefined ? '' : /[",\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v));

@@ -59,7 +59,7 @@ export const LIBRARY: Array<{ category: string; items: Array<{ q: string; tag: s
   ] },
   { category: 'Promises', items: [
     { q: 'Why are promises to pay breaking, and what should we do about it?', tag: 'root cause', mode: 'agent' },
-    { q: 'What percentage of PTPs are kept vs broken, segmented by credit score bands?', tag: 'credit', mode: 'chat' },
+    { q: 'What percentage of PTPs are kept vs broken, segmented by missed payments in the last 12 months?', tag: 'missed payments', mode: 'chat' },
     { q: 'Which Australian states have the highest broken-PTP rate?', tag: 'states', mode: 'chat' },
     { q: 'Which PTP due-date lead time correlates with the highest honour rate?', tag: 'lead time', mode: 'chat' },
   ] },
@@ -71,14 +71,13 @@ export const LIBRARY: Array<{ category: string; items: Array<{ q: string; tag: s
   ] },
   { category: 'Scenarios', items: [
     { q: 'How many customers have New_Product_Interest=Y but are 30+ days past due? What is their total balance?', tag: 'upgrade but overdue', mode: 'chat' },
-    { q: 'List customers porting out with Credit_Score < 550, ranked by Outstanding_Balance.', tag: 'porting out', mode: 'chat' },
-    { q: 'For customers with 2+ missed payments entering renewal, what % broke their last PTP?', tag: 'renewal', mode: 'chat' },
+        { q: 'For customers with 2+ missed payments entering renewal, what % broke their last PTP?', tag: 'renewal', mode: 'chat' },
     { q: 'Which accounts have Repeat_Call_Flag=Y for 2+ consecutive months AND are in the renewal window?', tag: 'repeat callers', mode: 'chat' },
   ] },
   { category: 'Risk', items: [
     { q: 'Show me the top 100 accounts by outstanding balance where the PTP was broken last month.', tag: 'at stake', mode: 'chat' },
     { q: 'How is the overdue balance spread across days-past-due buckets?', tag: 'exposure', mode: 'chat' },
     { q: 'Which accounts broke two or more promises in the last 12 months?', tag: 'repeat breakers', mode: 'chat' },
-    { q: 'For customers with Porting_Status=Outbound, what is the average outstanding balance and credit score?', tag: 'porting', mode: 'chat' },
+    { q: 'For customers with Porting_Status=Outbound, what is the average outstanding balance and days past due?', tag: 'porting', mode: 'chat' },
   ] },
 ];

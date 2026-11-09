@@ -8,6 +8,16 @@ Versions match git tags where one exists.
 
 ## Unreleased
 
+### Credit score out of the front end (Optus does not use it)
+- Credit score is gone from every front-end insight; the data still has it. That covers:
+  - the chapter 2 driver card and the executive summary;
+  - the KPI dictionary;
+  - the Command Center and Explorer account tables and their CSVs;
+  - the Explorer filter, measure and sort;
+  - the suggested questions and the Assistant's platform guide.
+- Scenario 2 (High-Risk Porting Out, defined by a credit score below 550) is removed from chapter 5 and the summary.
+- A credit filter saved in a browser is dropped.
+
 ### Optus logo updated
 - The logo is now the plain OPTUS wordmark (no yes bubble), with a transparent background, supplied by the user.
 
