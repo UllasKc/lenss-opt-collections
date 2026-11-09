@@ -8,6 +8,9 @@ Versions match git tags where one exists.
 
 ## Unreleased
 
+### Optus logo updated
+- The logo is now the plain OPTUS wordmark (no yes bubble), with a transparent background, supplied by the user.
+
 ### Call-outcome driver card
 - Command Center chapter 2: the call-outcome card shows contacted customers only (no "No contact" bar). Its line and colours compare against contacted customers' broken rate (45.4%), not the overall 44.6%.
 
